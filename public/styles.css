@@ -116,7 +116,7 @@ button:hover {
   border: 3px solid #2b2520;
   border-radius: 12px;
   background: linear-gradient(180deg, #25353f, #182126);
-  min-height: 146px;
+  height: 146px;
   color: #f8fbff;
   overflow: hidden;
   position: relative;
@@ -143,13 +143,7 @@ button:hover {
 }
 
 .slot-reel {
-  height: 292px;
-  transform: translateY(0);
-}
-
-.slot-reel.rolling-step {
-  transition: transform 120ms linear;
-  transform: translateY(-146px);
+  height: 146px;
 }
 
 .slot-item {

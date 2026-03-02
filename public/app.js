@@ -2,8 +2,6 @@ const statusEl = document.getElementById("status");
 const winnerEl = document.getElementById("winner");
 const slotTitleEl = document.getElementById("slot-title");
 const slotAuthorEl = document.getElementById("slot-author");
-const slotTitleNextEl = document.getElementById("slot-title-next");
-const slotAuthorNextEl = document.getElementById("slot-author-next");
 const slotMachineEl = document.querySelector(".slot-machine");
 const lightFrameEl = document.getElementById("light-frame");
 const leverEl = document.getElementById("lever-handle");
@@ -51,14 +49,10 @@ function updateSlot(book) {
   if (!book) {
     slotTitleEl.textContent = "No unread books";
     slotAuthorEl.textContent = "";
-    slotTitleNextEl.textContent = "No unread books";
-    slotAuthorNextEl.textContent = "";
     return;
   }
   slotTitleEl.textContent = book.title;
   slotAuthorEl.textContent = book.author || "Unknown author";
-  slotTitleNextEl.textContent = book.title;
-  slotAuthorNextEl.textContent = book.author || "Unknown author";
 }
 
 function renderBooks() {
