@@ -401,8 +401,35 @@ app.post("/api/host/skip", async (_req, res) => {
   }
 });
 
+app.post("/api/host/set", async (req, res) => {
+  try {
+    const { memberId } = req.body;
+    if (!memberId) return res.status(400).json({ error: "memberId is required." });
+
+    const data = readClubData();
+    const members = await fetchMembersFromNotion();
+    const target = members.find((m) => m.id === memberId);
+    if (!target) return res.status(404).json({ error: "Member not found." });
+
+    await setCurrentHost(memberId);
+
+    let ordered = orderMembers(members, data.hostOrder);
+    const idx = ordered.findIndex((m) => m.id === memberId);
+    if (idx > 0) {
+      ordered = [...ordered.slice(idx), ...ordered.slice(0, idx)];
+    }
+    data.hostOrder = ordered.map((m) => m.id);
+    writeClubData(data);
+
+    const organizer = await getOrganizerState();
+    res.json({ ok: true, currentHost: target.name, organizer });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.post("/api/invite", async (req, res) => {
-  const { to, eventName, hostName, description, location, date } = req.body;
+  const { to, eventName, hostName, title, description, location, date } = req.body;
   if (!Array.isArray(to) || !to.length) {
     return res.status(400).json({ error: "to must be a non-empty array of email addresses." });
   }
@@ -426,9 +453,9 @@ app.post("/api/invite", async (req, res) => {
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
   });
 
-  const title = `${eventName || "Book Club"} @ ${hostName || "Host TBD"}`;
+  const subject = title || `${eventName || "Book Club"} at ${hostName || "Host TBD"}`;
   const ics = buildICSInvite({
-    title,
+    title: subject,
     description: description || "Book Club discussion",
     location: location || "TBD",
     startUTC,
@@ -438,7 +465,7 @@ app.post("/api/invite", async (req, res) => {
   await transporter.sendMail({
     from: process.env.EMAIL_FROM || process.env.SMTP_USER,
     to: to.join(","),
-    subject: title,
+    subject,
     text: description || "Book Club meeting details attached.",
     alternatives: [{ contentType: "text/calendar; method=REQUEST", content: ics }],
     attachments: [

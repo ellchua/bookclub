@@ -1,6 +1,6 @@
 :root {
-  --bg: #f4efe6;
-  --card: #fffaf2;
+  --bg: #f1e8db;
+  --card: #f1e8db;
   --text: #1f1b16;
   --accent: #c05c2e;
   --accent-2: #2e6f68;
@@ -22,13 +22,20 @@ body {
 }
 
 .page {
-  max-width: 920px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 48px 24px;
+  min-height: 100vh;
+  display: grid;
+  align-content: start;
+  gap: 10px;
 }
 
 h1 {
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  letter-spacing: 0.02em;
+  text-align: center;
 }
 
 .subtitle {
@@ -37,11 +44,11 @@ h1 {
 }
 
 .card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
-  margin: 12px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
 }
 
 input,
@@ -76,8 +83,9 @@ button:hover {
   grid-template-columns: minmax(0, 1fr) 90px;
   gap: 12px;
   align-items: center;
-  margin: 12px 0;
+  margin: 6px auto 0;
   min-height: 220px;
+  width: min(760px, 100%);
 }
 
 .light-frame {
@@ -235,11 +243,14 @@ button:hover {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--accent-2);
+  text-align: center;
+  min-height: 1.4em;
 }
 
 .status {
-  margin-top: 10px;
+  margin-top: 2px;
   font-size: 0.95rem;
+  text-align: center;
 }
 
 .modal {
@@ -284,6 +295,19 @@ button:hover {
 ul {
   margin: 8px 0;
   padding-left: 20px;
+}
+
+.ghost {
+  width: fit-content;
+  justify-self: center;
+  background: transparent;
+  color: #6f4d35;
+  border: 1px solid #cda47f;
+  padding: 8px 12px;
+}
+
+.ghost:hover {
+  background: #ead6c2;
 }
 
 @media (max-width: 680px) {

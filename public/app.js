@@ -1,24 +1,17 @@
 const statusEl = document.getElementById("status");
 const winnerEl = document.getElementById("winner");
-const listEl = document.getElementById("book-list");
 const slotTitleEl = document.getElementById("slot-title");
 const slotAuthorEl = document.getElementById("slot-author");
 const slotTitleNextEl = document.getElementById("slot-title-next");
 const slotAuthorNextEl = document.getElementById("slot-author-next");
-const slotReelEl = document.getElementById("slot-reel");
 const slotMachineEl = document.querySelector(".slot-machine");
 const lightFrameEl = document.getElementById("light-frame");
 const leverEl = document.getElementById("lever-handle");
-const currentHostEl = document.getElementById("current-host");
-const membersLoadedEl = document.getElementById("members-loaded");
-const hostOrderEl = document.getElementById("host-order");
-const inviteToEl = document.getElementById("invite-to");
-const inviteLocationEl = document.getElementById("invite-location");
 const confettiCanvas = document.getElementById("confetti-canvas");
 const confettiCtx = confettiCanvas.getContext("2d");
 
 const modalEl = document.getElementById("modal");
-const modalTextEl = document.getElementById("modal-text");
+const modalContentEl = document.getElementById("modal-content");
 const modalYesBtn = document.getElementById("modal-yes");
 const modalNoBtn = document.getElementById("modal-no");
 
@@ -30,7 +23,6 @@ let rollTimer = null;
 let rolling = false;
 let confettiParticles = [];
 let confettiFrame = null;
-let reelAnimating = false;
 
 const LEVER_TOP = 8;
 const LEVER_BOTTOM = 124;
@@ -69,45 +61,7 @@ function updateSlot(book) {
   slotAuthorNextEl.textContent = book.author || "Unknown author";
 }
 
-function setNextSlot(book) {
-  if (!book) {
-    slotTitleNextEl.textContent = "No unread books";
-    slotAuthorNextEl.textContent = "";
-    return;
-  }
-  slotTitleNextEl.textContent = book.title;
-  slotAuthorNextEl.textContent = book.author || "Unknown author";
-}
-
-function commitNextToCurrent() {
-  slotTitleEl.textContent = slotTitleNextEl.textContent;
-  slotAuthorEl.textContent = slotAuthorNextEl.textContent;
-}
-
-async function rollUpToBook(book) {
-  if (reelAnimating) return;
-  reelAnimating = true;
-  setNextSlot(book);
-  slotReelEl.classList.add("rolling-step");
-  await new Promise((resolve) => setTimeout(resolve, 130));
-  commitNextToCurrent();
-  slotReelEl.classList.remove("rolling-step");
-  slotReelEl.style.transition = "none";
-  slotReelEl.style.transform = "translateY(0)";
-  // Force reflow so next animation step starts cleanly.
-  void slotReelEl.offsetHeight;
-  slotReelEl.style.transition = "";
-  slotReelEl.style.transform = "";
-  reelAnimating = false;
-}
-
 function renderBooks() {
-  listEl.innerHTML = "";
-  books.forEach((book) => {
-    const li = document.createElement("li");
-    li.textContent = `${book.title} — ${book.author || "Unknown author"}`;
-    listEl.appendChild(li);
-  });
   updateSlot(books[0] || null);
 }
 
@@ -213,8 +167,10 @@ function launchConfetti() {
   step();
 }
 
-function showModal(text) {
-  modalTextEl.textContent = text;
+function showChoiceModal(html, yesLabel = "Yes", noLabel = "No") {
+  modalContentEl.innerHTML = html;
+  modalYesBtn.textContent = yesLabel;
+  modalNoBtn.textContent = noLabel;
   modalEl.classList.remove("hidden");
   return new Promise((resolve) => {
     function cleanup() {
@@ -235,6 +191,118 @@ function showModal(text) {
   });
 }
 
+async function showScheduleModal(defaultDateTime, defaultLocation) {
+  modalContentEl.innerHTML = `
+    <h3>Calendar Scheduling</h3>
+    <label>Date & Time</label>
+    <input id="modal-date" type="datetime-local" value="${defaultDateTime || ""}" />
+    <label>Location</label>
+    <input id="modal-location" type="text" value="${defaultLocation || ""}" />
+  `;
+  modalYesBtn.textContent = "Confirm";
+  modalNoBtn.textContent = "Cancel";
+  modalEl.classList.remove("hidden");
+
+  return new Promise((resolve) => {
+    function cleanup() {
+      modalEl.classList.add("hidden");
+      modalYesBtn.removeEventListener("click", onYes);
+      modalNoBtn.removeEventListener("click", onNo);
+    }
+    function onYes() {
+      const date = document.getElementById("modal-date").value;
+      const location = document.getElementById("modal-location").value.trim();
+      cleanup();
+      resolve({ ok: true, date, location });
+    }
+    function onNo() {
+      cleanup();
+      resolve({ ok: false });
+    }
+    modalYesBtn.addEventListener("click", onYes);
+    modalNoBtn.addEventListener("click", onNo);
+  });
+}
+
+function defaultDateTimeLocal() {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  d.setHours(19, 0, 0, 0);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+    d.getMinutes()
+  )}`;
+}
+
+async function runHostAndInviteFlow(selectedBook) {
+  organizer = await api("/api/organizer");
+  const members = organizer.members || [];
+  if (!members.length) {
+    setStatus("No members found in Notion members DB.", true);
+    return;
+  }
+
+  let chosenHost = organizer.nextHost || organizer.currentHost || members[0];
+  const confirmNext = await showChoiceModal(
+    `<h3>Next host: ${chosenHost.name}</h3><p>Confirm host or choose another?</p>`,
+    "Confirm",
+    "Choose Another"
+  );
+
+  if (!confirmNext) {
+    const options = members
+      .map((m) => `<option value="${m.id}">${m.name}</option>`)
+      .join("");
+    const chooseAnother = await showChoiceModal(
+      `<h3>Choose Host</h3><select id="host-select">${options}</select>`,
+      "Use Selected",
+      "Cancel"
+    );
+    if (!chooseAnother) {
+      setStatus("Host selection canceled.");
+      return;
+    }
+    const selectedId = document.getElementById("host-select").value;
+    chosenHost = members.find((m) => m.id === selectedId) || chosenHost;
+  }
+
+  await api("/api/host/set", {
+    method: "POST",
+    body: JSON.stringify({ memberId: chosenHost.id })
+  });
+
+  const schedule = await showScheduleModal(defaultDateTimeLocal(), chosenHost.address || "");
+  if (!schedule.ok || !schedule.date) {
+    setStatus("Scheduling canceled.");
+    return;
+  }
+
+  const sendNow = await showChoiceModal(
+    "<h3>Send calendar invite?</h3><p>This will email all member addresses from Notion.</p>",
+    "Yes",
+    "No"
+  );
+  if (!sendNow) {
+    setStatus("Invite not sent.");
+    return;
+  }
+
+  const to = members.map((m) => m.email).filter(Boolean);
+  await api("/api/invite", {
+    method: "POST",
+    body: JSON.stringify({
+      to,
+      title: `Book Club at ${chosenHost.name}`,
+      hostName: chosenHost.name,
+      date: schedule.date,
+      location: schedule.location || chosenHost.address || "TBD",
+      description: `Book: ${selectedBook.title} by ${selectedBook.author || "Unknown author"}`
+    })
+  });
+
+  setStatus("Invite sent.");
+}
+
 async function rollBooks() {
   if (rolling) return;
   if (!books.length) {
@@ -252,8 +320,8 @@ async function rollBooks() {
 
   rollTimer = setInterval(() => {
     const random = books[Math.floor(Math.random() * books.length)];
-    rollUpToBook(random);
-  }, 120);
+    updateSlot(random);
+  }, 85);
 
   try {
     await sleep(2200);
@@ -263,25 +331,26 @@ async function rollBooks() {
     stopLightRoll();
 
     const selected = result.selected;
-    await rollUpToBook(selected);
+    updateSlot(selected);
     winnerEl.textContent = `Selected: ${selected.title}`;
     launchConfetti();
     await blinkYellow(10);
 
-    const confirm = await showModal("Confirm book?");
-    if (confirm) {
+    const confirmBook = await showChoiceModal("<h3>Confirm book?</h3>", "Yes", "No");
+    if (confirmBook) {
       await api("/api/books/confirm", {
         method: "POST",
         body: JSON.stringify({ id: selected.id })
       });
-      setStatus("Confirmed. Book marked as read in Notion.");
       await loadBooks();
+      setStatus("Book confirmed and marked as read.");
+      await runHostAndInviteFlow(selected);
       slotMachineEl.classList.remove("rolling");
       rolling = false;
       return;
     }
 
-    const again = await showModal("Spin again?");
+    const again = await showChoiceModal("<h3>Spin again?</h3>", "Yes", "No");
     if (again) {
       slotMachineEl.classList.remove("rolling");
       rolling = false;
@@ -348,85 +417,18 @@ function wireLever() {
   });
 }
 
-function renderOrganizer() {
-  const members = organizer?.members || [];
-  const currentHost = organizer?.currentHost?.name || "Not set";
-  const nextHost = organizer?.nextHost?.name || "Not set";
-  currentHostEl.textContent = `Current host: ${currentHost} | Next host: ${nextHost}`;
-  membersLoadedEl.textContent = `Loaded ${members.length} members from Notion.`;
-  inviteToEl.value = organizer?.inviteTo || "";
-  inviteLocationEl.value = organizer?.suggestedLocation || "";
-
-  hostOrderEl.innerHTML = "";
-  members.forEach((member, index) => {
-    const li = document.createElement("li");
-    const prefix = index === 0 ? "Now" : `${index + 1}`;
-    li.textContent = `${prefix}: ${member.name}${member.currentHost ? " (Current Host)" : ""}`;
-    hostOrderEl.appendChild(li);
-  });
-}
-
-async function loadOrganizer() {
-  try {
-    organizer = await api("/api/organizer");
-    renderOrganizer();
-  } catch (error) {
-    membersLoadedEl.textContent = error.message;
-    setStatus(error.message, true);
-  }
-}
-
 async function loadBooks() {
   try {
     const data = await api("/api/books");
     books = data.books;
     renderBooks();
-    setStatus(`Loaded ${books.length} unread books from Notion.`);
-  } catch (error) {
-    setStatus(error.message, true);
-  }
-}
-
-async function skipHost() {
-  try {
-    const result = await api("/api/host/skip", { method: "POST" });
-    organizer = result.organizer;
-    renderOrganizer();
-    setStatus(`Skipped ${result.skipped}. New host: ${result.currentHost}.`);
-  } catch (error) {
-    setStatus(error.message, true);
-  }
-}
-
-async function sendInvite(event) {
-  event.preventDefault();
-  const eventName = document.getElementById("invite-event-name").value.trim();
-  const payload = {
-    to: inviteToEl.value
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean),
-    eventName,
-    hostName: organizer?.nextHost?.name || organizer?.currentHost?.name || "Host TBD",
-    location: inviteLocationEl.value.trim(),
-    description: document.getElementById("invite-description").value.trim(),
-    date: document.getElementById("invite-date").value
-  };
-
-  try {
-    const result = await api("/api/invite", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-    setStatus(`Invite sent to ${result.sentTo} people.`);
+    setStatus(`Loaded ${books.length} unread books.`);
   } catch (error) {
     setStatus(error.message, true);
   }
 }
 
 document.getElementById("refresh-books").addEventListener("click", loadBooks);
-document.getElementById("skip-host").addEventListener("click", skipHost);
-document.getElementById("invite-form").addEventListener("submit", sendInvite);
 window.addEventListener("resize", () => {
   resizeConfettiCanvas();
   placeLights();
@@ -437,4 +439,3 @@ placeLights();
 wireLever();
 resetLever();
 loadBooks();
-loadOrganizer();
