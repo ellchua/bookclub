@@ -142,15 +142,15 @@ function resizeConfettiCanvas() {
 function launchConfetti() {
   confettiParticles = [];
   const colors = ["#ffdf52", "#ff6f61", "#5cc8ff", "#8ee16b", "#c38bff"];
-  for (let i = 0; i < 140; i++) {
+  for (let i = 0; i < 220; i++) {
     const fromLeft = i % 2 === 0;
     confettiParticles.push({
       x: fromLeft ? -20 : confettiCanvas.width + 20,
-      y: Math.random() * confettiCanvas.height * 0.9,
-      vx: fromLeft ? 2 + Math.random() * 5 : -2 - Math.random() * 5,
-      vy: -2 + Math.random() * 4,
-      life: 50 + Math.random() * 50,
-      size: 3 + Math.random() * 5,
+      y: Math.random() * confettiCanvas.height * 0.85,
+      vx: fromLeft ? 4 + Math.random() * 8 : -4 - Math.random() * 8,
+      vy: -5 + Math.random() * 4,
+      life: 70 + Math.random() * 60,
+      size: 7 + Math.random() * 9,
       color: colors[Math.floor(Math.random() * colors.length)]
     });
   }
@@ -236,15 +236,15 @@ function defaultDateTimeLocal() {
   )}`;
 }
 
-async function runHostAndInviteFlow(selectedBook) {
-  organizer = await api("/api/organizer");
-  const members = organizer.members || [];
+async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
+  const orgData = prefetchedOrganizer || await api("/api/organizer");
+  const members = orgData.members || [];
   if (!members.length) {
     setStatus("No members found in Notion members DB.", true);
     return;
   }
 
-  let chosenHost = organizer.nextHost || organizer.currentHost || members[0];
+  let chosenHost = orgData.nextHost || orgData.currentHost || members[0];
   const confirmNext = await showChoiceModal(
     `<h3>Next host: ${chosenHost.name}</h3><p>Confirm host or choose another?</p>`,
     "Confirm",
@@ -285,7 +285,7 @@ async function runHostAndInviteFlow(selectedBook) {
     "No"
   );
   if (!sendNow) {
-    setStatus("Invite not sent.");
+    setStatus("Invite not sent. Book not marked as read.");
     return;
   }
 
@@ -302,7 +302,13 @@ async function runHostAndInviteFlow(selectedBook) {
     })
   });
 
-  setStatus("Invite sent.");
+  // Mark the book as read in Notion only after invites go out
+  await api("/api/books/confirm", {
+    method: "POST",
+    body: JSON.stringify({ id: selectedBook.id })
+  });
+  await loadBooks();
+  setStatus("Invite sent!");
 }
 
 async function rollBooks() {
@@ -336,17 +342,17 @@ async function rollBooks() {
     updateSlot(selected);
     winnerEl.textContent = `Selected: ${selected.title}`;
     launchConfetti();
-    await blinkYellow(6);
+
+    // Pre-fetch organizer in parallel with the blink so the host popup is instant
+    const [, organizerData] = await Promise.all([
+      blinkYellow(4),
+      api("/api/organizer").catch(() => null)
+    ]);
 
     const confirmBook = await showChoiceModal("<h3>Confirm book?</h3>", "Yes", "No");
     if (confirmBook) {
-      await api("/api/books/confirm", {
-        method: "POST",
-        body: JSON.stringify({ id: selected.id })
-      });
-      await loadBooks();
-      setStatus("Book confirmed and marked as read.");
-      await runHostAndInviteFlow(selected);
+      // Keep the winner visible in the slot; book is marked read only after invite is sent
+      await runHostAndInviteFlow(selected, organizerData);
       slotMachineEl.classList.remove("rolling");
       rolling = false;
       return;
@@ -413,6 +419,8 @@ function wireLever() {
       setLeverTop(LEVER_BOTTOM);
       await sleep(70);
       rollBooks();
+      await sleep(300);
+      resetLever(); // spring back up
     } else {
       resetLever();
     }
