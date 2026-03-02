@@ -63,15 +63,22 @@ function placeLights() {
   lightFrameEl.querySelectorAll(".light").forEach((el) => el.remove());
   lights = [];
   const rect = lightFrameEl.getBoundingClientRect();
-  const width = rect.width;
-  const height = rect.height;
-  const perSide = 10;
-  const seen = new Set();
+  const w = rect.width;
+  const h = rect.height;
+  const inset = 6;
+  const ls = 12;
+  const half = ls / 2;
+
+  // Usable range for light centers on each side
+  const xRange = w - 2 * inset - ls; // w - 24
+  const yRange = h - 2 * inset - ls; // h - 24
+
+  // Choose a single spacing so all 4 sides feel even
+  const spacing = 26;
+  const hCount = Math.max(2, Math.round(xRange / spacing) + 1);
+  const vCount = Math.max(2, Math.round(yRange / spacing) + 1);
 
   function addLight(left, top) {
-    const key = `${Math.round(left)}-${Math.round(top)}`;
-    if (seen.has(key)) return;
-    seen.add(key);
     const el = document.createElement("span");
     el.className = "light";
     el.style.left = `${left}px`;
@@ -80,13 +87,17 @@ function placeLights() {
     lights.push(el);
   }
 
-  for (let i = 0; i < perSide; i++) {
-    const x = 8 + (i * (width - 24)) / (perSide - 1);
-    const y = 8 + (i * (height - 24)) / (perSide - 1);
-    addLight(x, 6);
-    addLight(x, height - 18);
-    addLight(6, y);
-    addLight(width - 18, y);
+  // Top and bottom rows (corners included)
+  for (let i = 0; i < hCount; i++) {
+    const cx = inset + half + (i / (hCount - 1)) * xRange;
+    addLight(cx - half, inset);           // top
+    addLight(cx - half, h - inset - ls); // bottom
+  }
+  // Left and right columns (corners already placed by top/bottom)
+  for (let i = 1; i <= vCount - 2; i++) {
+    const cy = inset + half + (i / (vCount - 1)) * yRange;
+    addLight(inset, cy - half);           // left
+    addLight(w - inset - ls, cy - half); // right
   }
 }
 
@@ -185,13 +196,11 @@ function showChoiceModal(html, yesLabel = "Yes", noLabel = "No") {
   });
 }
 
-async function showScheduleModal(defaultDateTime, defaultLocation) {
+async function showScheduleModal(defaultDateTime) {
   modalContentEl.innerHTML = `
     <h3>Calendar Scheduling</h3>
     <label>Date & Time</label>
     <input id="modal-date" type="datetime-local" value="${defaultDateTime || ""}" />
-    <label>Location</label>
-    <input id="modal-location" type="text" value="${defaultLocation || ""}" />
   `;
   modalYesBtn.textContent = "Confirm";
   modalNoBtn.textContent = "Cancel";
@@ -205,9 +214,8 @@ async function showScheduleModal(defaultDateTime, defaultLocation) {
     }
     function onYes() {
       const date = document.getElementById("modal-date").value;
-      const location = document.getElementById("modal-location").value.trim();
       cleanup();
-      resolve({ ok: true, date, location });
+      resolve({ ok: true, date });
     }
     function onNo() {
       cleanup();
@@ -265,7 +273,7 @@ async function runHostAndInviteFlow(selectedBook) {
     body: JSON.stringify({ memberId: chosenHost.id })
   });
 
-  const schedule = await showScheduleModal(defaultDateTimeLocal(), chosenHost.address || "");
+  const schedule = await showScheduleModal(defaultDateTimeLocal());
   if (!schedule.ok || !schedule.date) {
     setStatus("Scheduling canceled.");
     return;
@@ -289,7 +297,7 @@ async function runHostAndInviteFlow(selectedBook) {
       title: `Book Club at ${chosenHost.name}`,
       hostName: chosenHost.name,
       date: schedule.date,
-      location: schedule.location || chosenHost.address || "TBD",
+      location: chosenHost.address || "TBD",
       description: `Book: ${selectedBook.title} by ${selectedBook.author || "Unknown author"}`
     })
   });
@@ -318,7 +326,7 @@ async function rollBooks() {
   }, 85);
 
   try {
-    await sleep(2200);
+    await sleep(1400);
     const result = await pickPromise;
     clearInterval(rollTimer);
     rollTimer = null;
@@ -328,7 +336,7 @@ async function rollBooks() {
     updateSlot(selected);
     winnerEl.textContent = `Selected: ${selected.title}`;
     launchConfetti();
-    await blinkYellow(10);
+    await blinkYellow(6);
 
     const confirmBook = await showChoiceModal("<h3>Confirm book?</h3>", "Yes", "No");
     if (confirmBook) {

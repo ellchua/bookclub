@@ -411,14 +411,39 @@ app.post("/api/host/set", async (req, res) => {
     const target = members.find((m) => m.id === memberId);
     if (!target) return res.status(404).json({ error: "Member not found." });
 
+    // Determine the natural next host before making any changes
+    let ordered = orderMembers(members, data.hostOrder);
+    const currentHost = ordered.find((m) => m.currentHost);
+    const currentIdx = currentHost ? ordered.findIndex((m) => m.id === currentHost.id) : 0;
+    if (currentIdx > 0) {
+      ordered = [...ordered.slice(currentIdx), ...ordered.slice(0, currentIdx)];
+    }
+    // ordered[0] = current host (A), ordered[1] = natural next host (B)
+    const naturalNextHost = ordered.length > 1 ? ordered[1] : null;
+
     await setCurrentHost(memberId);
 
-    let ordered = orderMembers(members, data.hostOrder);
-    const idx = ordered.findIndex((m) => m.id === memberId);
-    if (idx > 0) {
-      ordered = [...ordered.slice(idx), ...ordered.slice(0, idx)];
+    let newOrdered;
+    if (naturalNextHost && naturalNextHost.id !== memberId) {
+      // User skipped the natural next host (B); insert B right after new host (C)
+      // ordered = [A, B, C, D, E] → desired: [C, B, D, E, A]
+      const remaining = ordered.filter(
+        (m) => m.id !== memberId && m.id !== naturalNextHost.id
+      );
+      // remaining = [A, D, E]; remaining[0] = old current host (goes to end)
+      newOrdered = [
+        target,
+        naturalNextHost,
+        ...remaining.slice(1),
+        ...remaining.slice(0, 1)
+      ];
+    } else {
+      // User confirmed the natural next host — normal rotation
+      const idx = ordered.findIndex((m) => m.id === memberId);
+      newOrdered = idx > 0 ? [...ordered.slice(idx), ...ordered.slice(0, idx)] : [...ordered];
     }
-    data.hostOrder = ordered.map((m) => m.id);
+
+    data.hostOrder = newOrdered.map((m) => m.id);
     writeClubData(data);
 
     const organizer = await getOrganizerState();
