@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Book Club Wheel</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <h1>Book Club Control Panel</h1>
+      <p class="subtitle">Pick the next book and organize meetings.</p>
+
+      <section class="card">
+        <h2>Book Wheel</h2>
+        <p>Reads unread books from Notion and marks the winner as read.</p>
+        <div class="wheel-wrap">
+          <canvas id="wheel-canvas" width="320" height="320"></canvas>
+          <div id="wheel" class="wheel-label">Load books to spin</div>
+          <button id="spin-btn">Spin & Mark Winner Read</button>
+        </div>
+        <p id="winner" class="winner"></p>
+        <button id="refresh-books">Refresh Notion Books</button>
+        <ul id="book-list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Meeting Organizer + Invite</h2>
+        <p id="current-host"></p>
+        <button id="skip-host">Skip Current Host</button>
+        <p id="members-loaded"></p>
+        <ul id="host-order"></ul>
+        <form id="invite-form">
+          <input id="invite-to" placeholder="Emails (comma-separated)" required />
+          <input id="invite-event-name" placeholder="Event name" value="Book Club Meeting" />
+          <input id="invite-location" placeholder="Location" value="TBD" />
+          <textarea id="invite-description" placeholder="Description"></textarea>
+          <label>Date</label>
+          <input id="invite-date" type="datetime-local" required />
+          <button type="submit">Send Invite</button>
+        </form>
+      </section>
+
+      <p id="status" class="status"></p>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
