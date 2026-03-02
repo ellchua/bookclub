@@ -3,6 +3,9 @@ const winnerEl = document.getElementById("winner");
 const listEl = document.getElementById("book-list");
 const slotTitleEl = document.getElementById("slot-title");
 const slotAuthorEl = document.getElementById("slot-author");
+const slotTitleNextEl = document.getElementById("slot-title-next");
+const slotAuthorNextEl = document.getElementById("slot-author-next");
+const slotReelEl = document.getElementById("slot-reel");
 const slotMachineEl = document.querySelector(".slot-machine");
 const lightFrameEl = document.getElementById("light-frame");
 const leverEl = document.getElementById("lever-handle");
@@ -27,6 +30,7 @@ let rollTimer = null;
 let rolling = false;
 let confettiParticles = [];
 let confettiFrame = null;
+let reelAnimating = false;
 
 const LEVER_TOP = 8;
 const LEVER_BOTTOM = 124;
@@ -55,10 +59,46 @@ function updateSlot(book) {
   if (!book) {
     slotTitleEl.textContent = "No unread books";
     slotAuthorEl.textContent = "";
+    slotTitleNextEl.textContent = "No unread books";
+    slotAuthorNextEl.textContent = "";
     return;
   }
   slotTitleEl.textContent = book.title;
   slotAuthorEl.textContent = book.author || "Unknown author";
+  slotTitleNextEl.textContent = book.title;
+  slotAuthorNextEl.textContent = book.author || "Unknown author";
+}
+
+function setNextSlot(book) {
+  if (!book) {
+    slotTitleNextEl.textContent = "No unread books";
+    slotAuthorNextEl.textContent = "";
+    return;
+  }
+  slotTitleNextEl.textContent = book.title;
+  slotAuthorNextEl.textContent = book.author || "Unknown author";
+}
+
+function commitNextToCurrent() {
+  slotTitleEl.textContent = slotTitleNextEl.textContent;
+  slotAuthorEl.textContent = slotAuthorNextEl.textContent;
+}
+
+async function rollUpToBook(book) {
+  if (reelAnimating) return;
+  reelAnimating = true;
+  setNextSlot(book);
+  slotReelEl.classList.add("rolling-step");
+  await new Promise((resolve) => setTimeout(resolve, 130));
+  commitNextToCurrent();
+  slotReelEl.classList.remove("rolling-step");
+  slotReelEl.style.transition = "none";
+  slotReelEl.style.transform = "translateY(0)";
+  // Force reflow so next animation step starts cleanly.
+  void slotReelEl.offsetHeight;
+  slotReelEl.style.transition = "";
+  slotReelEl.style.transform = "";
+  reelAnimating = false;
 }
 
 function renderBooks() {
@@ -77,9 +117,13 @@ function placeLights() {
   const rect = lightFrameEl.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
-  const edgeCount = 9;
+  const perSide = 10;
+  const seen = new Set();
 
   function addLight(left, top) {
+    const key = `${Math.round(left)}-${Math.round(top)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
     const el = document.createElement("span");
     el.className = "light";
     el.style.left = `${left}px`;
@@ -88,13 +132,11 @@ function placeLights() {
     lights.push(el);
   }
 
-  for (let i = 0; i < edgeCount; i++) {
-    const x = 8 + (i * (width - 24)) / (edgeCount - 1);
+  for (let i = 0; i < perSide; i++) {
+    const x = 8 + (i * (width - 24)) / (perSide - 1);
+    const y = 8 + (i * (height - 24)) / (perSide - 1);
     addLight(x, 6);
     addLight(x, height - 18);
-  }
-  for (let i = 1; i < edgeCount - 1; i++) {
-    const y = 8 + (i * (height - 24)) / (edgeCount - 1);
     addLight(6, y);
     addLight(width - 18, y);
   }
@@ -210,8 +252,8 @@ async function rollBooks() {
 
   rollTimer = setInterval(() => {
     const random = books[Math.floor(Math.random() * books.length)];
-    updateSlot(random);
-  }, 85);
+    rollUpToBook(random);
+  }, 120);
 
   try {
     await sleep(2200);
@@ -221,7 +263,7 @@ async function rollBooks() {
     stopLightRoll();
 
     const selected = result.selected;
-    updateSlot(selected);
+    await rollUpToBook(selected);
     winnerEl.textContent = `Selected: ${selected.title}`;
     launchConfetti();
     await blinkYellow(10);

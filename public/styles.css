@@ -73,7 +73,7 @@ button:hover {
 .slot-machine {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr 90px;
+  grid-template-columns: minmax(0, 1fr) 90px;
   gap: 12px;
   align-items: center;
   margin: 12px 0;
@@ -107,8 +107,45 @@ button:hover {
 .slot-window {
   border: 3px solid #2b2520;
   border-radius: 12px;
-  background: #fff9ee;
-  min-height: 140px;
+  background: linear-gradient(180deg, #25353f, #182126);
+  min-height: 146px;
+  color: #f8fbff;
+  overflow: hidden;
+  position: relative;
+}
+
+.slot-window::before,
+.slot-window::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 16px;
+  z-index: 2;
+}
+
+.slot-window::before {
+  top: 0;
+  background: linear-gradient(180deg, rgba(10, 10, 10, 0.4), rgba(10, 10, 10, 0));
+}
+
+.slot-window::after {
+  bottom: 0;
+  background: linear-gradient(0deg, rgba(10, 10, 10, 0.4), rgba(10, 10, 10, 0));
+}
+
+.slot-reel {
+  height: 292px;
+  transform: translateY(0);
+}
+
+.slot-reel.rolling-step {
+  transition: transform 120ms linear;
+  transform: translateY(-146px);
+}
+
+.slot-item {
+  height: 146px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -118,15 +155,18 @@ button:hover {
 }
 
 .slot-title {
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   font-weight: 800;
   line-height: 1.2;
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
 }
 
 .slot-author {
   margin-top: 8px;
-  font-size: 0.95rem;
-  opacity: 0.75;
+  font-size: 0.9rem;
+  opacity: 0.95;
+  color: #c4ebff;
 }
 
 .wheel-label {
@@ -144,7 +184,7 @@ button:hover {
 }
 
 .slot-machine.rolling .slot-window {
-  animation: pulse 0.22s linear infinite;
+  animation: pulse 0.18s linear infinite;
 }
 
 .lever-wrap {
@@ -247,6 +287,14 @@ ul {
 }
 
 @media (max-width: 680px) {
+  .slot-machine {
+    grid-template-columns: 1fr 70px;
+  }
+
+  .lever-track {
+    height: 156px;
+  }
+
   .page {
     padding: 14px;
   }
