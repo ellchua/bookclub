@@ -268,12 +268,14 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
     chosenHost = members.find((m) => m.id === selectedId) || chosenHost;
   }
 
-  await api("/api/host/set", {
-    method: "POST",
-    body: JSON.stringify({ memberId: chosenHost.id })
-  });
-
-  const schedule = await showScheduleModal(defaultDateTimeLocal());
+  // Show the date picker immediately while the host update runs in the background
+  const [, schedule] = await Promise.all([
+    api("/api/host/set", {
+      method: "POST",
+      body: JSON.stringify({ memberId: chosenHost.id })
+    }),
+    showScheduleModal(defaultDateTimeLocal())
+  ]);
   if (!schedule.ok || !schedule.date) {
     setStatus("Scheduling canceled.");
     return;
@@ -396,11 +398,13 @@ function wireLever() {
   let active = false;
   let startY = 0;
   let pulled = false;
+  let moved = false;
 
   leverEl.addEventListener("pointerdown", (event) => {
     if (rolling) return;
     active = true;
     pulled = false;
+    moved = false;
     startY = event.clientY;
     leverEl.setPointerCapture(event.pointerId);
   });
@@ -408,6 +412,7 @@ function wireLever() {
   leverEl.addEventListener("pointermove", (event) => {
     if (!active || rolling) return;
     const delta = event.clientY - startY;
+    if (Math.abs(delta) > 8) moved = true;
     const top = setLeverTop(LEVER_TOP + delta);
     if (top >= LEVER_TRIGGER) pulled = true;
   });
@@ -415,7 +420,8 @@ function wireLever() {
   leverEl.addEventListener("pointerup", async () => {
     if (!active) return;
     active = false;
-    if (pulled && !rolling) {
+    const triggered = pulled || !moved; // full drag OR a tap
+    if (triggered && !rolling) {
       setLeverTop(LEVER_BOTTOM);
       await sleep(70);
       rollBooks();
