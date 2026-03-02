@@ -12,12 +12,19 @@
       <p class="subtitle">Pick the next book and organize meetings.</p>
 
       <section class="card">
-        <h2>Book Wheel</h2>
-        <p>Reads unread books from Notion and marks the winner as read.</p>
-        <div class="wheel-wrap">
-          <canvas id="wheel-canvas" width="320" height="320"></canvas>
-          <div id="wheel" class="wheel-label">Load books to spin</div>
-          <button id="spin-btn">Spin & Mark Winner Read</button>
+        <h2>Book Roller</h2>
+        <p>Pull the lever to roll unread books from Notion.</p>
+        <div class="slot-machine">
+          <div id="light-frame" class="light-frame"></div>
+          <div class="slot-window">
+            <div id="slot-title" class="slot-title">Load books to roll</div>
+            <div id="slot-author" class="slot-author"></div>
+          </div>
+          <div class="lever-wrap">
+            <div class="lever-track">
+              <div id="lever-handle" class="lever-handle" title="Pull to roll"></div>
+            </div>
+          </div>
         </div>
         <p id="winner" class="winner"></p>
         <button id="refresh-books">Refresh Notion Books</button>
@@ -43,6 +50,17 @@
 
       <p id="status" class="status"></p>
     </main>
+
+    <canvas id="confetti-canvas"></canvas>
+    <div id="modal" class="modal hidden">
+      <div class="modal-card">
+        <p id="modal-text"></p>
+        <div class="modal-actions">
+          <button id="modal-yes">Yes</button>
+          <button id="modal-no" class="secondary">No</button>
+        </div>
+      </div>
+    </div>
 
     <script src="/app.js"></script>
   </body>

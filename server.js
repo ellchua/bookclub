@@ -20,12 +20,23 @@ const notion = notionEnabled
   : null;
 
 const titlePropertyName = process.env.NOTION_BOOK_TITLE_PROPERTY || "Name";
+const authorPropertyName = process.env.NOTION_BOOK_AUTHOR_PROPERTY || "Author";
 const readPropertyName = process.env.NOTION_BOOK_READ_PROPERTY || "Read";
 const membersDatabaseId = process.env.NOTION_MEMBERS_DATABASE_ID || "";
 const memberNameProperty = process.env.NOTION_MEMBER_NAME_PROPERTY || "Name";
 const memberEmailProperty = process.env.NOTION_MEMBER_EMAIL_PROPERTY || "Email";
+const memberAddressProperty = process.env.NOTION_MEMBER_ADDRESS_PROPERTY || "Address";
 const memberCurrentHostProperty =
   process.env.NOTION_MEMBER_CURRENT_HOST_PROPERTY || "Current Host";
+const builtinHostOrderNames = [
+  "Andrea",
+  "Ayan",
+  "Ellora",
+  "Quentin",
+  "Maggie",
+  "Dario",
+  "Tiziana"
+];
 
 function ensureDataFile() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -70,6 +81,21 @@ function getPageTitle(page) {
   return "Untitled";
 }
 
+function getBookAuthor(page) {
+  const prop = getPropertyValue(page, authorPropertyName);
+  if (!prop) return "Unknown author";
+  if (prop.type === "rich_text") return richTextToString(prop.rich_text) || "Unknown author";
+  if (prop.type === "title") return richTextToString(prop.title) || "Unknown author";
+  if (prop.type === "select") return prop.select?.name || "Unknown author";
+  if (prop.type === "multi_select") {
+    const names = (prop.multi_select || []).map((x) => x.name).filter(Boolean);
+    return names.join(", ") || "Unknown author";
+  }
+  if (prop.type === "formula" && prop.formula?.type === "string")
+    return prop.formula.string || "Unknown author";
+  return "Unknown author";
+}
+
 async function fetchBooksFromNotion() {
   if (!notionEnabled) {
     throw new Error(
@@ -89,7 +115,8 @@ async function fetchBooksFromNotion() {
 
   return response.results.map((page) => ({
     id: page.id,
-    title: getPageTitle(page)
+    title: getPageTitle(page),
+    author: getBookAuthor(page)
   }));
 }
 
@@ -116,6 +143,17 @@ function getMemberCurrentHost(page) {
   return false;
 }
 
+function getMemberAddress(page) {
+  const prop = getPropertyValue(page, memberAddressProperty);
+  if (!prop) return "";
+  if (prop.type === "rich_text") return richTextToString(prop.rich_text);
+  if (prop.type === "title") return richTextToString(prop.title);
+  if (prop.type === "url") return prop.url || "";
+  if (prop.type === "email") return prop.email || "";
+  if (prop.type === "phone_number") return prop.phone_number || "";
+  return "";
+}
+
 async function fetchMembersFromNotion() {
   if (!notionEnabled || !membersDatabaseId) {
     throw new Error("Members DB not configured. Set NOTION_MEMBERS_DATABASE_ID.");
@@ -130,8 +168,32 @@ async function fetchMembersFromNotion() {
     id: page.id,
     name: getMemberName(page),
     email: getMemberEmail(page),
+    address: getMemberAddress(page),
     currentHost: getMemberCurrentHost(page)
   }));
+}
+
+function getBuiltInHostOrderIds(members) {
+  const used = new Set();
+  const byName = new Map(
+    members.map((m) => [m.name.trim().toLowerCase(), m.id])
+  );
+  const ordered = [];
+
+  for (const name of builtinHostOrderNames) {
+    const id = byName.get(name.trim().toLowerCase());
+    if (id && !used.has(id)) {
+      ordered.push(id);
+      used.add(id);
+    }
+  }
+  for (const member of members) {
+    if (!used.has(member.id)) {
+      ordered.push(member.id);
+      used.add(member.id);
+    }
+  }
+  return ordered;
 }
 
 function orderMembers(members, hostOrder) {
@@ -209,7 +271,20 @@ function buildICSInvite({ title, description, location, startUTC, endUTC }) {
 async function getOrganizerState() {
   const data = readClubData();
   const members = await fetchMembersFromNotion();
-  if (!members.length) return { members: [], currentHost: null, inviteTo: "" };
+  if (!members.length) {
+    return {
+      members: [],
+      currentHost: null,
+      nextHost: null,
+      suggestedLocation: "",
+      inviteTo: ""
+    };
+  }
+
+  if (!data.hostOrder.length) {
+    data.hostOrder = getBuiltInHostOrderIds(members);
+    writeClubData(data);
+  }
 
   let orderedMembers = orderMembers(members, data.hostOrder);
   let currentHost = orderedMembers.find((m) => m.currentHost) || null;
@@ -233,10 +308,13 @@ async function getOrganizerState() {
 
   data.hostOrder = orderedMembers.map((m) => m.id);
   writeClubData(data);
+  const nextHost = orderedMembers.length > 1 ? orderedMembers[1] : orderedMembers[0];
 
   return {
     members: orderedMembers,
     currentHost,
+    nextHost,
+    suggestedLocation: nextHost?.address || "",
     inviteTo: orderedMembers
       .map((m) => m.email)
       .filter(Boolean)
@@ -257,18 +335,29 @@ app.get("/api/books", async (_req, res) => {
   }
 });
 
-app.post("/api/books/spin", async (_req, res) => {
+app.post("/api/books/pick", async (_req, res) => {
   try {
     const books = await fetchBooksFromNotion();
     if (!books.length) return res.status(404).json({ error: "No books found." });
 
     const selected = books[Math.floor(Math.random() * books.length)];
+    res.json({ selected });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post("/api/books/confirm", async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "Book id is required." });
+
     await notion.pages.update({
-      page_id: selected.id,
+      page_id: id,
       properties: { [readPropertyName]: { checkbox: true } }
     });
 
-    res.json({ selected, markedRead: true });
+    res.json({ ok: true, markedRead: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

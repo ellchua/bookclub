@@ -67,16 +67,66 @@ button:hover {
 }
 
 .wheel-wrap {
-  display: grid;
-  gap: 10px;
-  margin: 10px 0;
-  justify-items: center;
+  display: none;
 }
 
-#wheel-canvas {
+.slot-machine {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 90px;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0;
+  min-height: 220px;
+}
+
+.light-frame {
+  position: relative;
+  border: 3px solid #402a1f;
+  border-radius: 16px;
+  min-height: 180px;
+  background: linear-gradient(180deg, #2f2722, #4d3a2e);
+  padding: 20px;
+  overflow: hidden;
+}
+
+.light {
+  position: absolute;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #fff;
-  border: 3px solid var(--accent-2);
+  background: #ff6f61;
+  box-shadow: 0 0 8px #ff6f61;
+}
+
+.light.yellow {
+  background: #ffd94a;
+  box-shadow: 0 0 12px #ffd94a;
+}
+
+.slot-window {
+  border: 3px solid #2b2520;
+  border-radius: 12px;
+  background: #fff9ee;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 16px;
+}
+
+.slot-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.slot-author {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  opacity: 0.75;
 }
 
 .wheel-label {
@@ -93,8 +143,40 @@ button:hover {
   text-align: center;
 }
 
-.wheel-label.spinning {
-  animation: pulse 0.25s linear infinite;
+.slot-machine.rolling .slot-window {
+  animation: pulse 0.22s linear infinite;
+}
+
+.lever-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.lever-track {
+  width: 24px;
+  height: 180px;
+  border-radius: 999px;
+  background: #3c2e24;
+  position: relative;
+  border: 2px solid #221912;
+}
+
+.lever-handle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ff8f4a, #bf4f1f);
+  border: 3px solid #632613;
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 0);
+  top: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lever-handle:active {
+  cursor: grabbing;
 }
 
 @keyframes pulse {
@@ -118,6 +200,45 @@ button:hover {
 .status {
   margin-top: 10px;
   font-size: 0.95rem;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-card {
+  width: min(420px, 90vw);
+  background: #fffaf2;
+  border-radius: 14px;
+  padding: 20px;
+  border: 1px solid var(--border);
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.secondary {
+  background: #6c6b68;
+}
+
+#confetti-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
 }
 
 ul {
