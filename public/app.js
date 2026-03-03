@@ -268,14 +268,13 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
     chosenHost = members.find((m) => m.id === selectedId) || chosenHost;
   }
 
-  // Show the date picker immediately while the host update runs in the background
-  const [, schedule] = await Promise.all([
-    api("/api/host/set", {
-      method: "POST",
-      body: JSON.stringify({ memberId: chosenHost.id })
-    }),
-    showScheduleModal(defaultDateTimeLocal())
-  ]);
+  // Fire host update without waiting — it doesn't affect anything downstream
+  api("/api/host/set", {
+    method: "POST",
+    body: JSON.stringify({ memberId: chosenHost.id })
+  }).catch((err) => setStatus(err.message, true));
+
+  const schedule = await showScheduleModal(defaultDateTimeLocal());
   if (!schedule.ok || !schedule.date) {
     setStatus("Scheduling canceled.");
     return;
