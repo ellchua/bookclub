@@ -1,69 +1,62 @@
-# Book Club App
+# Book Club Slot Machine
 
-Simple browser app to run your book club:
-- Reads unread books from a Notion database
-- Uses a slot-style roller with lever interaction
-- Shows title + author while rolling
-- Confirms selection before marking as read in Notion
-- Uses Notion members DB for host rotation
-- Supports skipping host and reordering after the chosen host
-- Optionally sends calendar invites by email (`.ics`)
+A vibecoded project — built by tinkering, tweaking, and iterating with Claude Code. Not production-grade software, just a fun personal tool that actually gets used.
 
-## 1. Setup
+A private web app for a book club with friends. Instead of manually picking the next book, members pull a slot machine lever to randomly select one from an unread list pulled live from Notion. Once a book is chosen, the app walks through confirming the host, scheduling the meeting, and sending calendar invites to all members — all from the same interface.
 
-```bash
-npm install
-cp .env.example .env
-```
+Hosted on a private custom domain.
 
-Fill in `.env`:
-- `NOTION_API_KEY`
-- `NOTION_BOOKS_DATABASE_ID`
-- `NOTION_BOOK_TITLE_PROPERTY` (usually `Name`)
-- `NOTION_BOOK_AUTHOR_PROPERTY` (usually `Author`)
-- `NOTION_BOOK_READ_PROPERTY` (checkbox, usually `Read`)
+---
 
-Optional member DB for invite autofill:
-- `NOTION_MEMBERS_DATABASE_ID`
-- `NOTION_MEMBER_NAME_PROPERTY` (usually `Name`)
-- `NOTION_MEMBER_EMAIL_PROPERTY` (usually `Email`)
-- `NOTION_MEMBER_ADDRESS_PROPERTY` (usually `Address`)
-- `NOTION_MEMBER_CURRENT_HOST_PROPERTY` (checkbox, usually `Current Host`)
+## What it does
 
-Optional for invite emails:
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`
+- **Slot machine roller** — pulls unread books from a Notion database and randomly selects one with a slot machine animation
+- **Host rotation** — tracks the hosting order across sessions; suggests the next host automatically and allows choosing someone else, adjusting the sequence accordingly
+- **Calendar invites** — after confirming a book and host, sends a `.ics` calendar invite via email to all members with the date, time, and host's address as the location
+- **Notion as the source of truth** — books, members, host order, addresses, and emails all live in Notion; the app reads and writes directly to it
+- **Mobile-friendly** — works on phone and desktop; lever can be dragged or tapped
 
-## 2. Notion Database Requirements
+---
 
-Books database needs:
-- Title property matching `NOTION_BOOK_TITLE_PROPERTY`
-- Author property matching `NOTION_BOOK_AUTHOR_PROPERTY`
-- Checkbox property matching `NOTION_BOOK_READ_PROPERTY`
-  - `false` means unread (eligible for wheel)
-  - `true` means read (excluded)
+## Tech stack
 
-Optional members database:
-- Name property matching `NOTION_MEMBER_NAME_PROPERTY`
-- Email property matching `NOTION_MEMBER_EMAIL_PROPERTY`
-- Address property matching `NOTION_MEMBER_ADDRESS_PROPERTY`
-- Checkbox property matching `NOTION_MEMBER_CURRENT_HOST_PROPERTY`
-  - one row should be checked as current host
+- **Backend**: Node.js + Express
+- **Frontend**: Vanilla HTML, CSS, JavaScript (no framework)
+- **Database**: Notion (via the Notion API)
+- **Email**: Nodemailer over SMTP (Gmail)
+- **Hosting**: Railway
+- **Domain**: Netlify DNS → Railway
 
-## 3. Run
+---
 
-```bash
-npm start
-```
+## Notion setup
 
-Open:
-[http://localhost:3000](http://localhost:3000)
+The app connects to two Notion databases:
 
-## Notes
+### Books database
+| Property | Type | Notes |
+|----------|------|-------|
+| Title | Title | Book title |
+| Author | Text | Author name |
+| Read | Checkbox | Checked = already read, excluded from roller |
 
-- Selecting a winner flips the book's read checkbox to `true` in Notion.
-- Roller flow: pick -> `Confirm book?` -> yes marks read, no asks `Spin again?`.
-- Meeting organizer default built-in order is: Andrea, Ayan, Ellora, Quentin, Maggie, Dario, Tiziana.
-- Skip host reordering is persisted in `data/club.json`.
-- Invite subject/title is formatted as `Event Name @ Host Name`.
-- Invite location auto-populates from the next host's `Address`.
-- Invite form uses one `Date` field; calendar event duration defaults to 1 hour.
+### Members database
+| Property | Type | Notes |
+|----------|------|-------|
+| Name | Title | Member name |
+| Email | Email | Used for calendar invites |
+| Address | Text | Used as meeting location in the invite |
+| Current Host | Checkbox | Marks who is currently hosting |
+| Order | Number | Rotation sequence; auto-managed by the app |
+
+---
+
+## Config
+
+Secrets and API keys live in a `.env` file (not committed). Connections include a Notion integration for books and members data, and Gmail via an App Password for outgoing invite emails.
+
+## Deployment
+
+Hosted on [Railway](https://railway.app), connected to this GitHub repo. Every push to `main` triggers an automatic redeploy. Environment variables are set in the Railway dashboard.
+
+The host rotation order is stored in the **Order** column of the Notion members database, so it persists across redeploys without any additional storage.
