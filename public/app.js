@@ -180,8 +180,8 @@ function showChoiceModal(html, yesLabel = "Yes", noLabel = "No") {
   return new Promise((resolve) => {
     function cleanup() {
       modalEl.classList.add("hidden");
-      modalYesBtn.removeEventListener("click", onYes);
-      modalNoBtn.removeEventListener("click", onNo);
+      modalYesBtn.removeEventListener("pointerdown", onYes);
+      modalNoBtn.removeEventListener("pointerdown", onNo);
     }
     function onYes() {
       cleanup();
@@ -191,8 +191,8 @@ function showChoiceModal(html, yesLabel = "Yes", noLabel = "No") {
       cleanup();
       resolve(false);
     }
-    modalYesBtn.addEventListener("click", onYes);
-    modalNoBtn.addEventListener("click", onNo);
+    modalYesBtn.addEventListener("pointerdown", onYes);
+    modalNoBtn.addEventListener("pointerdown", onNo);
   });
 }
 
@@ -209,8 +209,8 @@ async function showScheduleModal(defaultDateTime) {
   return new Promise((resolve) => {
     function cleanup() {
       modalEl.classList.add("hidden");
-      modalYesBtn.removeEventListener("click", onYes);
-      modalNoBtn.removeEventListener("click", onNo);
+      modalYesBtn.removeEventListener("pointerdown", onYes);
+      modalNoBtn.removeEventListener("pointerdown", onNo);
     }
     function onYes() {
       const date = document.getElementById("modal-date").value;
@@ -221,8 +221,8 @@ async function showScheduleModal(defaultDateTime) {
       cleanup();
       resolve({ ok: false });
     }
-    modalYesBtn.addEventListener("click", onYes);
-    modalNoBtn.addEventListener("click", onNo);
+    modalYesBtn.addEventListener("pointerdown", onYes);
+    modalNoBtn.addEventListener("pointerdown", onNo);
   });
 }
 
