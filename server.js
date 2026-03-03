@@ -1,14 +1,11 @@
 const express = require("express");
 const path = require("path");
-const fs = require("fs");
 const { Client } = require("@notionhq/client");
 const nodemailer = require("nodemailer");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, "data");
-const DATA_FILE = path.join(DATA_DIR, "club.json");
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -28,6 +25,7 @@ const memberEmailProperty = process.env.NOTION_MEMBER_EMAIL_PROPERTY || "Email";
 const memberAddressProperty = process.env.NOTION_MEMBER_ADDRESS_PROPERTY || "Address";
 const memberCurrentHostProperty =
   process.env.NOTION_MEMBER_CURRENT_HOST_PROPERTY || "Current Host";
+const memberOrderProperty = process.env.NOTION_MEMBER_ORDER_PROPERTY || "Order";
 const builtinHostOrderNames = [
   "Andrea",
   "Ayan",
@@ -38,28 +36,6 @@ const builtinHostOrderNames = [
   "Tiziana"
 ];
 
-function ensureDataFile() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(
-      DATA_FILE,
-      JSON.stringify({ hostOrder: [], upcomingDates: [] }, null, 2)
-    );
-  }
-}
-
-function readClubData() {
-  ensureDataFile();
-  const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-  if (!Array.isArray(data.hostOrder)) data.hostOrder = [];
-  if (!Array.isArray(data.upcomingDates)) data.upcomingDates = [];
-  return data;
-}
-
-function writeClubData(data) {
-  ensureDataFile();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
 
 function richTextToString(richText) {
   if (!Array.isArray(richText)) return "";
@@ -143,6 +119,12 @@ function getMemberCurrentHost(page) {
   return false;
 }
 
+function getMemberOrder(page) {
+  const prop = getPropertyValue(page, memberOrderProperty);
+  if (!prop || prop.type !== "number") return 0;
+  return prop.number || 0;
+}
+
 function getMemberAddress(page) {
   const prop = getPropertyValue(page, memberAddressProperty);
   if (!prop) return "";
@@ -169,7 +151,8 @@ async function fetchMembersFromNotion() {
     name: getMemberName(page),
     email: getMemberEmail(page),
     address: getMemberAddress(page),
-    currentHost: getMemberCurrentHost(page)
+    currentHost: getMemberCurrentHost(page),
+    order: getMemberOrder(page)
   }));
 }
 
@@ -196,33 +179,37 @@ function getBuiltInHostOrderIds(members) {
   return ordered;
 }
 
-function orderMembers(members, hostOrder) {
-  const byId = new Map(members.map((m) => [m.id, m]));
-  const ordered = [];
-  for (const id of hostOrder) {
-    const member = byId.get(id);
-    if (member) ordered.push(member);
-  }
-  for (const member of members) {
-    if (!ordered.some((m) => m.id === member.id)) ordered.push(member);
-  }
-  return ordered;
-}
-
-async function setCurrentHost(memberId) {
-  const members = await fetchMembersFromNotion();
+async function setCurrentHost(memberId, existingMembers = null) {
+  const members = existingMembers || await fetchMembersFromNotion();
   await Promise.all(
     members.map((member) =>
       notion.pages.update({
         page_id: member.id,
         properties: {
-          [memberCurrentHostProperty]: {
-            checkbox: member.id === memberId
-          }
+          [memberCurrentHostProperty]: { checkbox: member.id === memberId }
         }
       })
     )
   );
+}
+
+async function writeMemberOrders(orderedMembers) {
+  await Promise.all(
+    orderedMembers.map((member, idx) =>
+      notion.pages.update({
+        page_id: member.id,
+        properties: { [memberOrderProperty]: { number: idx + 1 } }
+      })
+    )
+  );
+}
+
+function sortByOrder(members) {
+  return [...members].sort((a, b) => {
+    if (!a.order) return 1;
+    if (!b.order) return -1;
+    return a.order - b.order;
+  });
 }
 
 function parseDateTime(dateTime) {
@@ -269,45 +256,32 @@ function buildICSInvite({ title, description, location, startUTC, endUTC }) {
 }
 
 async function getOrganizerState() {
-  const data = readClubData();
   const members = await fetchMembersFromNotion();
   if (!members.length) {
-    return {
-      members: [],
-      currentHost: null,
-      nextHost: null,
-      suggestedLocation: "",
-      inviteTo: ""
-    };
+    return { members: [], currentHost: null, nextHost: null, suggestedLocation: "", inviteTo: "" };
   }
 
-  if (!data.hostOrder.length) {
-    data.hostOrder = getBuiltInHostOrderIds(members);
-    writeClubData(data);
+  let orderedMembers;
+  const hasOrders = members.some((m) => m.order > 0);
+
+  if (!hasOrders) {
+    // First run: seed order from built-in sequence and write to Notion
+    const orderedIds = getBuiltInHostOrderIds(members);
+    orderedMembers = orderedIds.map((id) => members.find((m) => m.id === id)).filter(Boolean);
+    members.forEach((m) => {
+      if (!orderedMembers.some((om) => om.id === m.id)) orderedMembers.push(m);
+    });
+    await writeMemberOrders(orderedMembers);
+  } else {
+    orderedMembers = sortByOrder(members);
   }
 
-  let orderedMembers = orderMembers(members, data.hostOrder);
   let currentHost = orderedMembers.find((m) => m.currentHost) || null;
-
   if (!currentHost) {
     currentHost = orderedMembers[0];
-    await setCurrentHost(currentHost.id);
-    orderedMembers = orderedMembers.map((m) => ({
-      ...m,
-      currentHost: m.id === currentHost.id
-    }));
+    await setCurrentHost(currentHost.id, members);
   }
 
-  const currentIdx = orderedMembers.findIndex((m) => m.id === currentHost.id);
-  if (currentIdx > 0) {
-    orderedMembers = [
-      ...orderedMembers.slice(currentIdx),
-      ...orderedMembers.slice(0, currentIdx)
-    ];
-  }
-
-  data.hostOrder = orderedMembers.map((m) => m.id);
-  writeClubData(data);
   const nextHost = orderedMembers.length > 1 ? orderedMembers[1] : orderedMembers[0];
 
   return {
@@ -315,10 +289,7 @@ async function getOrganizerState() {
     currentHost,
     nextHost,
     suggestedLocation: nextHost?.address || "",
-    inviteTo: orderedMembers
-      .map((m) => m.email)
-      .filter(Boolean)
-      .join(", ")
+    inviteTo: orderedMembers.map((m) => m.email).filter(Boolean).join(", ")
   };
 }
 
@@ -374,25 +345,24 @@ app.get("/api/organizer", async (_req, res) => {
 
 app.post("/api/host/skip", async (_req, res) => {
   try {
-    const data = readClubData();
     const members = await fetchMembersFromNotion();
     if (members.length < 2) {
       return res.status(400).json({ error: "Need at least 2 members to skip host." });
     }
 
-    const ordered = orderMembers(members, data.hostOrder);
+    const ordered = sortByOrder(members);
     const currentHost = ordered.find((m) => m.currentHost) || ordered[0];
     const currentIdx = ordered.findIndex((m) => m.id === currentHost.id);
-    const nextIdx = (currentIdx + 1) % ordered.length;
-    const nextHost = ordered[nextIdx];
+    const nextHost = ordered[(currentIdx + 1) % ordered.length];
 
     const withoutCurrent = ordered.filter((m) => m.id !== currentHost.id);
     const nextPos = withoutCurrent.findIndex((m) => m.id === nextHost.id);
     withoutCurrent.splice(nextPos + 1, 0, currentHost);
 
-    await setCurrentHost(nextHost.id);
-    data.hostOrder = withoutCurrent.map((m) => m.id);
-    writeClubData(data);
+    await Promise.all([
+      setCurrentHost(nextHost.id, members),
+      writeMemberOrders(withoutCurrent)
+    ]);
 
     const organizer = await getOrganizerState();
     res.json({ ok: true, skipped: currentHost.name, currentHost: nextHost.name, organizer });
@@ -406,22 +376,21 @@ app.post("/api/host/set", async (req, res) => {
     const { memberId } = req.body;
     if (!memberId) return res.status(400).json({ error: "memberId is required." });
 
-    const data = readClubData();
     const members = await fetchMembersFromNotion();
     const target = members.find((m) => m.id === memberId);
     if (!target) return res.status(404).json({ error: "Member not found." });
 
-    // Determine the natural next host before making any changes
-    let ordered = orderMembers(members, data.hostOrder);
-    const currentHost = ordered.find((m) => m.currentHost);
-    const currentIdx = currentHost ? ordered.findIndex((m) => m.id === currentHost.id) : 0;
-    if (currentIdx > 0) {
-      ordered = [...ordered.slice(currentIdx), ...ordered.slice(0, currentIdx)];
-    }
+    // Get current order from Notion and rotate so current host is first
+    const sorted = sortByOrder(members);
+    const currentHost = sorted.find((m) => m.currentHost);
+    const currentIdx = currentHost ? sorted.findIndex((m) => m.id === currentHost.id) : 0;
+    const ordered =
+      currentIdx > 0
+        ? [...sorted.slice(currentIdx), ...sorted.slice(0, currentIdx)]
+        : [...sorted];
+
     // ordered[0] = current host (A), ordered[1] = natural next host (B)
     const naturalNextHost = ordered.length > 1 ? ordered[1] : null;
-
-    await setCurrentHost(memberId);
 
     let newOrdered;
     if (naturalNextHost && naturalNextHost.id !== memberId) {
@@ -430,21 +399,17 @@ app.post("/api/host/set", async (req, res) => {
       const remaining = ordered.filter(
         (m) => m.id !== memberId && m.id !== naturalNextHost.id
       );
-      // remaining = [A, D, E]; remaining[0] = old current host (goes to end)
-      newOrdered = [
-        target,
-        naturalNextHost,
-        ...remaining.slice(1),
-        ...remaining.slice(0, 1)
-      ];
+      newOrdered = [target, naturalNextHost, ...remaining.slice(1), ...remaining.slice(0, 1)];
     } else {
       // User confirmed the natural next host — normal rotation
       const idx = ordered.findIndex((m) => m.id === memberId);
       newOrdered = idx > 0 ? [...ordered.slice(idx), ...ordered.slice(0, idx)] : [...ordered];
     }
 
-    data.hostOrder = newOrdered.map((m) => m.id);
-    writeClubData(data);
+    await Promise.all([
+      setCurrentHost(memberId, members),
+      writeMemberOrders(newOrdered)
+    ]);
 
     const organizer = await getOrganizerState();
     res.json({ ok: true, currentHost: target.name, organizer });
@@ -510,6 +475,5 @@ app.get("*", (_req, res) => {
 });
 
 app.listen(PORT, () => {
-  ensureDataFile();
   console.log(`Book club app running on http://localhost:${PORT}`);
 });
