@@ -9,7 +9,7 @@ Hosted on a private custom domain.
 ---
 
 ## What it does
-
+![Slot machine screenshot](bookclub_home.png)
 - **Slot machine roller** — pulls unread books from a Notion database and randomly selects one with a slot machine animation
 - **Host rotation** — tracks the hosting order across sessions; suggests the next host automatically and allows choosing someone else, adjusting the sequence accordingly
 - **Calendar invites** — after confirming a book and host, sends a `.ics` calendar invite via email to all members with the date, time, and host's address as the location
