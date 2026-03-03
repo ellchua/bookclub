@@ -344,15 +344,14 @@ async function rollBooks() {
     winnerEl.textContent = `Selected: ${selected.title}`;
     launchConfetti();
 
-    // Pre-fetch organizer in parallel with the blink so the host popup is instant
-    const [, organizerData] = await Promise.all([
-      blinkYellow(4),
-      api("/api/organizer").catch(() => null)
-    ]);
+    // Start organizer fetch in background immediately; don't block the confirm popup on it
+    const organizerPromise = api("/api/organizer").catch(() => null);
+    await blinkYellow(4);
 
     const confirmBook = await showChoiceModal("<h3>Confirm book?</h3>", "Yes", "No");
     if (confirmBook) {
-      // Keep the winner visible in the slot; book is marked read only after invite is sent
+      // Await organizer here — user just clicked so it's likely already resolved
+      const organizerData = await organizerPromise;
       await runHostAndInviteFlow(selected, organizerData);
       slotMachineEl.classList.remove("rolling");
       rolling = false;
