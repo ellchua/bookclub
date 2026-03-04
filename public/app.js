@@ -434,7 +434,7 @@ function wireLever() {
 async function loadBooks() {
   try {
     const data = await api("/api/books");
-    books = data.books;
+    books = data.books.sort(() => Math.random() - 0.5);
     renderBooks();
     setStatus(`Loaded ${books.length} unread books.`);
   } catch (error) {
