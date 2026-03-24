@@ -230,13 +230,13 @@ function escapeICS(text) {
     .replace(/\n/g, "\\n");
 }
 
-function buildICSInvite({ title, description, location, startUTC, endUTC }) {
+function buildICSInvite({ title, description, location, startUTC, endUTC, organizer, attendees = [] }) {
   const uid = `bookclub-${Date.now()}@local`;
   const now = toICSDate(new Date());
   const start = toICSDate(startUTC);
   const end = toICSDate(endUTC);
 
-  return [
+  const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Book Club//EN",
@@ -250,9 +250,17 @@ function buildICSInvite({ title, description, location, startUTC, endUTC }) {
     `SUMMARY:${escapeICS(title)}`,
     `DESCRIPTION:${escapeICS(description)}`,
     `LOCATION:${escapeICS(location)}`,
-    "END:VEVENT",
-    "END:VCALENDAR"
-  ].join("\r\n");
+  ];
+
+  if (organizer) {
+    lines.push(`ORGANIZER:mailto:${organizer}`);
+  }
+  for (const email of attendees) {
+    lines.push(`ATTENDEE;RSVP=TRUE:mailto:${email}`);
+  }
+
+  lines.push("END:VEVENT", "END:VCALENDAR");
+  return lines.join("\r\n");
 }
 
 async function getOrganizerState() {
@@ -444,29 +452,42 @@ app.post("/api/invite", async (req, res) => {
   });
 
   const subject = title || `${eventName || "Book Club"} at ${hostName || "Host TBD"}`;
+  const organizer = process.env.SMTP_USER;
   const ics = buildICSInvite({
     title: subject,
     description: description || "Book Club discussion",
     location: location || "TBD",
     startUTC,
-    endUTC
+    endUTC,
+    organizer,
+    attendees: to
   });
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_FROM || process.env.SMTP_USER,
-    to: to.join(","),
-    subject,
-    text: description || "Book Club meeting details attached.",
-    alternatives: [{ contentType: "text/calendar; method=REQUEST", content: ics }],
-    attachments: [
-      {
-        filename: "book-club-invite.ics",
-        content: ics,
-        contentType: "text/calendar"
-      }
-    ]
-  });
+  console.log(`[invite] Sending to ${to.length} recipients: ${to.join(", ")}`);
+  console.log(`[invite] Subject: ${subject}`);
+  console.log(`[invite] Date: ${startUTC.toISOString()}`);
 
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+      to: to.join(","),
+      subject,
+      text: description || "Book Club meeting details attached.",
+      alternatives: [{ contentType: "text/calendar; method=REQUEST", content: ics }],
+      attachments: [
+        {
+          filename: "book-club-invite.ics",
+          content: ics,
+          contentType: "text/calendar"
+        }
+      ]
+    });
+  } catch (err) {
+    console.error(`[invite] SMTP error:`, err);
+    return res.status(500).json({ error: err.message });
+  }
+
+  console.log(`[invite] Successfully sent to ${to.length} recipients`);
   res.json({ ok: true, sentTo: to.length });
 });
 
