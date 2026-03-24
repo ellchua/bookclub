@@ -282,24 +282,37 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
     return;
   }
 
+  const membersWithEmail = members.filter((m) => m.email);
+  const checklistHtml = membersWithEmail
+    .map((m) => `
+      <label style="display:flex;align-items:center;gap:8px;margin:6px 0;cursor:pointer">
+        <input type="checkbox" value="${m.email}" checked style="width:auto;margin:0"> ${m.name} <span style="color:#999;font-size:13px">(${m.email})</span>
+      </label>`)
+    .join("");
+
   const sendNow = await showChoiceModal(
-    "<h3>Send calendar invite?</h3><p>This will email all member addresses from Notion.</p>",
-    "Yes",
-    "No"
+    `<h3>Send calendar invite?</h3>${checklistHtml}`,
+    "Send",
+    "Cancel"
   );
   if (!sendNow) {
     setStatus("Invite not sent. Book not marked as read.");
     return;
   }
 
-  const to = members.map((m) => m.email).filter(Boolean);
+  const to = Array.from(document.querySelectorAll("#modal input[type=checkbox]:checked"))
+    .map((cb) => cb.value);
+  if (!to.length) {
+    setStatus("No recipients selected. Invite not sent.");
+    return;
+  }
   let inviteSent = false;
   try {
     await api("/api/invite", {
       method: "POST",
       body: JSON.stringify({
         to,
-        title: `Book Club at ${chosenHost.name}`,
+        title: `Book Club at ${chosenHost.name}'s`,
         hostName: chosenHost.name,
         date: schedule.date,
         location: chosenHost.address || "TBD",

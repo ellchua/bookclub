@@ -442,7 +442,7 @@ app.post("/api/invite", async (req, res) => {
     return res.status(400).json({ error: "RESEND_API_KEY is not configured." });
   }
 
-  const subject = title || `${eventName || "Book Club"} at ${hostName || "Host TBD"}`;
+  const subject = title || `${eventName || "Book Club"} at ${hostName ? `${hostName}'s` : "Host TBD"}`;
   const from = "Book Club <bookclub@ellora.ch>";
   const ics = buildICSInvite({
     title: subject,
