@@ -301,6 +301,19 @@ ul {
   padding-left: 20px;
 }
 
+.book-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: none;
+}
+
 .ghost {
   width: fit-content;
   justify-self: center;

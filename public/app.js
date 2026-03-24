@@ -12,6 +12,8 @@ const modalEl = document.getElementById("modal");
 const modalContentEl = document.getElementById("modal-content");
 const modalYesBtn = document.getElementById("modal-yes");
 const modalNoBtn = document.getElementById("modal-no");
+const confirmBookBtn = document.getElementById("confirm-book");
+const spinAgainBtn = document.getElementById("spin-again");
 
 let books = [];
 let organizer = null;
@@ -367,13 +369,23 @@ async function rollBooks() {
     winnerEl.textContent = `Selected: ${selected.title}`;
     launchConfetti();
 
-    // Start organizer fetch in background immediately; don't block the confirm popup on it
+    // Start organizer fetch in background immediately
     const organizerPromise = api("/api/organizer").catch(() => null);
     await blinkYellow(4);
 
-    const confirmBook = await showChoiceModal("<h3>Confirm book?</h3>", "Yes", "No");
-    if (confirmBook) {
-      // Await organizer here — user just clicked so it's likely already resolved
+    confirmBookBtn.disabled = false;
+    spinAgainBtn.disabled = false;
+    setStatus("Confirm the book or spin again.");
+
+    const action = await new Promise((resolve) => {
+      confirmBookBtn.onclick = () => resolve("confirm");
+      spinAgainBtn.onclick = () => resolve("spin");
+    });
+
+    confirmBookBtn.disabled = true;
+    spinAgainBtn.disabled = true;
+
+    if (action === "confirm") {
       const organizerData = await organizerPromise;
       await runHostAndInviteFlow(selected, organizerData);
       slotMachineEl.classList.remove("rolling");
@@ -381,20 +393,21 @@ async function rollBooks() {
       return;
     }
 
-    const again = await showChoiceModal("<h3>Spin again?</h3>", "Yes", "No");
-    if (again) {
-      slotMachineEl.classList.remove("rolling");
-      rolling = false;
-      await sleep(120);
-      await rollBooks();
-      return;
-    }
-    setStatus("Selection canceled. Book left unmarked.");
+    // spin again
+    slotMachineEl.classList.remove("rolling");
+    rolling = false;
+    await sleep(120);
+    await rollBooks();
+    return;
   } catch (error) {
     setStatus(error.message, true);
   } finally {
     if (rollTimer) clearTimeout(rollTimer);
     stopLightRoll();
+    confirmBookBtn.onclick = null;
+    spinAgainBtn.onclick = null;
+    confirmBookBtn.disabled = true;
+    spinAgainBtn.disabled = true;
     slotMachineEl.classList.remove("rolling");
     rolling = false;
     resetLever();
