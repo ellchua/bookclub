@@ -472,8 +472,8 @@ app.post("/api/invite", async (req, res) => {
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
           <h2 style="color:#5c3d1e">📖 Spilling the Tea Book Club</h2>
-          <p style="font-size:16px">${description}</p>
           <table style="border-collapse:collapse;margin:16px 0">
+            <tr><td style="padding:4px 12px 4px 0;color:#888">📚 Book</td><td style="padding:4px 0"><strong>${description}</strong></td></tr>
             <tr><td style="padding:4px 12px 4px 0;color:#888">📅 Date</td><td style="padding:4px 0"><strong>${dateStr}</strong></td></tr>
             <tr><td style="padding:4px 12px 4px 0;color:#888">⏰ Time</td><td style="padding:4px 0"><strong>${timeStr} (Paris)</strong></td></tr>
             <tr><td style="padding:4px 12px 4px 0;color:#888">📍 Location</td><td style="padding:4px 0"><strong>${location || "TBD"}</strong></td></tr>
