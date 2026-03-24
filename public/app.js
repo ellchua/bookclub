@@ -282,7 +282,7 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
     return;
   }
 
-  const membersWithEmail = members.filter((m) => m.email);
+  const membersWithEmail = members.filter((m) => m.email).sort((a, b) => a.name.localeCompare(b.name));
   const checklistHtml = membersWithEmail
     .map((m) => `
       <label style="display:flex;align-items:center;gap:8px;margin:6px 0;cursor:pointer">
