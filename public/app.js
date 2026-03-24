@@ -336,7 +336,7 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
     method: "POST",
     body: JSON.stringify({ id: selectedBook.id })
   });
-  await loadBooks();
+  await loadBooks({ render: false });
   setStatus(inviteSent ? "Invite sent!" : "Book marked as read (invite not sent).");
 }
 
@@ -480,11 +480,11 @@ function wireLever() {
   });
 }
 
-async function loadBooks() {
+async function loadBooks({ render = true } = {}) {
   try {
     const data = await api("/api/books");
     books = data.books.sort(() => Math.random() - 0.5);
-    renderBooks();
+    if (render) renderBooks();
     setStatus(`Loaded ${books.length} unread books.`);
   } catch (error) {
     setStatus(error.message, true);
