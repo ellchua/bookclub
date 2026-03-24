@@ -1,7 +1,7 @@
 const express = require("express");
 const path = require("path");
 const { Client } = require("@notionhq/client");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 require("dotenv").config();
 
 const app = express();
@@ -438,28 +438,19 @@ app.post("/api/invite", async (req, res) => {
   }
   const endUTC = new Date(startUTC.getTime() + 60 * 60 * 1000);
 
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    return res.status(400).json({
-      error: "SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS in .env."
-    });
+  if (!process.env.RESEND_API_KEY) {
+    return res.status(400).json({ error: "RESEND_API_KEY is not configured." });
   }
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: String(process.env.SMTP_SECURE || "false") === "true",
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-  });
-
   const subject = title || `${eventName || "Book Club"} at ${hostName || "Host TBD"}`;
-  const organizer = process.env.SMTP_USER;
+  const from = "Book Club <bookclub@ellora.ch>";
   const ics = buildICSInvite({
     title: subject,
     description: description || "Book Club discussion",
     location: location || "TBD",
     startUTC,
     endUTC,
-    organizer,
+    organizer: from,
     attendees: to
   });
 
@@ -468,22 +459,21 @@ app.post("/api/invite", async (req, res) => {
   console.log(`[invite] Date: ${startUTC.toISOString()}`);
 
   try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || process.env.SMTP_USER,
-      to: to.join(","),
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from,
+      to,
       subject,
       text: description || "Book Club meeting details attached.",
-      alternatives: [{ contentType: "text/calendar; method=REQUEST", content: ics }],
       attachments: [
         {
           filename: "book-club-invite.ics",
-          content: ics,
-          contentType: "text/calendar"
+          content: Buffer.from(ics).toString("base64")
         }
       ]
     });
   } catch (err) {
-    console.error(`[invite] SMTP error:`, err);
+    console.error(`[invite] Resend error:`, err);
     return res.status(500).json({ error: err.message });
   }
 
