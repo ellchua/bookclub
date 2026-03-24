@@ -127,8 +127,8 @@ function getMemberOrder(page) {
 
 function getMemberAddress(page) {
   const prop = getPropertyValue(page, memberAddressProperty);
-  if (!prop) { console.log(`[address] property "${memberAddressProperty}" not found for page ${page.id}`); return ""; }
-  console.log(`[address] type="${prop.type}" value=${JSON.stringify(prop)}`);
+  if (!prop) return "";
+  if (prop.type === "place") return prop.place?.address || "";
   if (prop.type === "rich_text") return richTextToString(prop.rich_text);
   if (prop.type === "title") return richTextToString(prop.title);
   if (prop.type === "url") return prop.url || "";
