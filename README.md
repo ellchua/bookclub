@@ -23,7 +23,7 @@ Hosted on a private custom domain.
 - **Backend**: Node.js + Express
 - **Frontend**: Vanilla HTML, CSS, JavaScript (no framework)
 - **Database**: Notion (via the Notion API)
-- **Email**: Nodemailer over SMTP (Gmail)
+- **Email**: Resend API
 - **Hosting**: Railway
 - **Domain**: Netlify DNS → Railway
 
@@ -53,10 +53,26 @@ The app connects to two Notion databases:
 
 ## Config
 
-Secrets and API keys live in a `.env` file (not committed). Connections include a Notion integration for books and members data, and Gmail via an App Password for outgoing invite emails.
+Secrets and API keys live in a `.env` file (not committed). Connections include a Notion integration for books and members data, and a Resend API key for outgoing invite emails.
 
 ## Deployment
 
 Hosted on [Railway](https://railway.app), connected to this GitHub repo. Every push to `main` triggers an automatic redeploy. Environment variables are set in the Railway dashboard.
 
 The host rotation order is stored in the **Order** column of the Notion members database, so it persists across redeploys without any additional storage.
+
+---
+
+## Patch notes
+
+### March 2026
+- **Slot machine animation** — spin extended from 1.4s to 5s with a quadratic ease-out slowdown over the final 2 seconds, like a real slot machine coming to rest
+- **Confirm & spin again buttons** — replaced post-spin modals with persistent buttons below the slot machine so the selected book title stays visible while deciding
+- **Calendar invites** — switched from Gmail SMTP (blocked by Railway) to [Resend](https://resend.com) API; emails now send from `bookclub@ellora.ch`
+- **Invite recipient checklist** — before sending, a checklist lets you deselect individual members; sorted alphabetically
+- **Email HTML** — invite email now has a proper HTML layout with book, date, time, and location as a table; reduces spam scoring
+- **Paris timezone** — invite times displayed and parsed in Europe/Paris time
+- **Host address auto-fill** — meeting location in the calendar invite now pulls automatically from the host's Notion address (supports Notion's place property type)
+- **Resilient Notion update** — if the calendar invite fails, a dialog offers to mark the book as read in Notion anyway
+- **Selected book persists** — slot machine keeps showing the chosen book after sending the invite, until the page is reloaded
+- **Subject line fix** — calendar invite subject now correctly reads "Book Club at [Name]'s"
