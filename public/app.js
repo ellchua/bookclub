@@ -291,25 +291,38 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
   }
 
   const to = members.map((m) => m.email).filter(Boolean);
-  await api("/api/invite", {
-    method: "POST",
-    body: JSON.stringify({
-      to,
-      title: `Book Club at ${chosenHost.name}`,
-      hostName: chosenHost.name,
-      date: schedule.date,
-      location: chosenHost.address || "TBD",
-      description: `Book: ${selectedBook.title} by ${selectedBook.author || "Unknown author"}`
-    })
-  });
+  let inviteSent = false;
+  try {
+    await api("/api/invite", {
+      method: "POST",
+      body: JSON.stringify({
+        to,
+        title: `Book Club at ${chosenHost.name}`,
+        hostName: chosenHost.name,
+        date: schedule.date,
+        location: chosenHost.address || "TBD",
+        description: `Book: ${selectedBook.title} by ${selectedBook.author || "Unknown author"}`
+      })
+    });
+    inviteSent = true;
+  } catch (err) {
+    const markAnyway = await showChoiceModal(
+      `<h3>Invite failed</h3><p>${err.message}</p><p>Mark book as read in Notion anyway?</p>`,
+      "Yes, mark it",
+      "No"
+    );
+    if (!markAnyway) {
+      setStatus("Book not marked as read.", true);
+      return;
+    }
+  }
 
-  // Mark the book as read in Notion only after invites go out
   await api("/api/books/confirm", {
     method: "POST",
     body: JSON.stringify({ id: selectedBook.id })
   });
   await loadBooks();
-  setStatus("Invite sent!");
+  setStatus(inviteSent ? "Invite sent!" : "Book marked as read (invite not sent).");
 }
 
 async function rollBooks() {
@@ -327,16 +340,26 @@ async function rollBooks() {
   const pickPromise = api("/api/books/pick", { method: "POST" });
   startLightRoll();
 
-  rollTimer = setInterval(() => {
-    const random = books[Math.floor(Math.random() * books.length)];
-    updateSlot(random);
-  }, 85);
+  const SPIN_DURATION = 5000;
+  const spinStart = Date.now();
+  function scheduleNextBook() {
+    const remaining = SPIN_DURATION - (Date.now() - spinStart);
+    if (remaining <= 0) return;
+    // Slow down over the last 2000ms: delay eases from 70ms → 550ms
+    const slowWindow = 2000;
+    const t = remaining > slowWindow ? 0 : 1 - remaining / slowWindow;
+    const delay = 70 + Math.pow(t, 2) * 480;
+    rollTimer = setTimeout(() => {
+      updateSlot(books[Math.floor(Math.random() * books.length)]);
+      scheduleNextBook();
+    }, delay);
+  }
+  scheduleNextBook();
 
   try {
-    await sleep(1400);
+    await sleep(SPIN_DURATION);
     const result = await pickPromise;
-    clearInterval(rollTimer);
-    rollTimer = null;
+    if (rollTimer) { clearTimeout(rollTimer); rollTimer = null; }
     stopLightRoll();
 
     const selected = result.selected;
@@ -370,7 +393,7 @@ async function rollBooks() {
   } catch (error) {
     setStatus(error.message, true);
   } finally {
-    if (rollTimer) clearInterval(rollTimer);
+    if (rollTimer) clearTimeout(rollTimer);
     stopLightRoll();
     slotMachineEl.classList.remove("rolling");
     rolling = false;
