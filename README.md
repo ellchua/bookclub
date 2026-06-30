@@ -12,7 +12,7 @@ Hosted on a private custom domain.
 ![Slot machine screenshot](bookclub_home.png)
 - **Slot machine roller** — pulls unread books from a Notion database and randomly selects one with a slot machine animation
 - **Host rotation** — tracks the hosting order across sessions; suggests the next host automatically and allows choosing someone else, adjusting the sequence accordingly
-- **Calendar invites** — after confirming a book and host, sends a `.ics` calendar invite via email to all members with the date, time, and host's address as the location
+- **Calendar invites** — after confirming a book and host, creates a Google Calendar event with all selected members as guests, using the host's address as the location
 - **Notion as the source of truth** — books, members, host order, addresses, and emails all live in Notion; the app reads and writes directly to it
 - **Mobile-friendly** — works on phone and desktop; lever can be dragged or tapped
 
@@ -23,7 +23,7 @@ Hosted on a private custom domain.
 - **Backend**: Node.js + Express
 - **Frontend**: Vanilla HTML, CSS, JavaScript (no framework)
 - **Database**: Notion (via the Notion API)
-- **Email**: Resend API
+- **Calendar invites**: Google Calendar API
 - **Hosting**: Railway
 - **Domain**: Netlify DNS → Railway
 
@@ -53,7 +53,18 @@ The app connects to two Notion databases:
 
 ## Config
 
-Secrets and API keys live in a `.env` file (not committed). Connections include a Notion integration for books and members data, and a Resend API key for outgoing invite emails.
+Secrets and API keys live in a `.env` file (not committed). Connections include a Notion integration for books and members data, plus Google OAuth credentials for creating calendar invites from a personal Google Calendar.
+
+### Google Calendar setup
+
+1. In Google Cloud Console, enable the Google Calendar API.
+2. Create a Desktop app OAuth client for your personal Google account.
+3. Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to `.env`.
+4. Run `npm run google:auth`, open the printed URL, and authorize calendar event access.
+5. Copy the printed `GOOGLE_REFRESH_TOKEN` into `.env` and your hosting provider's environment variables.
+6. Move the OAuth app from Testing to Production so the refresh token does not expire after 7 days.
+
+By default invites are created on `GOOGLE_CALENDAR_ID=primary` in `Europe/Paris`, and Google sends guest update emails directly.
 
 ## Deployment
 
@@ -68,9 +79,8 @@ The host rotation order is stored in the **Order** column of the Notion members 
 ### March 2026
 - **Slot machine animation** — spin extended from 1.4s to 5s with a quadratic ease-out slowdown over the final 2 seconds, like a real slot machine coming to rest
 - **Confirm & spin again buttons** — replaced post-spin modals with persistent buttons below the slot machine so the selected book title stays visible while deciding
-- **Calendar invites** — switched from Gmail SMTP (blocked by Railway) to [Resend](https://resend.com) API
+- **Calendar invites** — switched from Gmail SMTP (blocked by Railway) to [Resend](https://resend.com) API, then to Google Calendar API so Google creates the actual event and emails guests
 - **Invite recipient checklist** — before sending, a checklist lets you deselect individual members; sorted alphabetically
-- **Email HTML** — invite email now has a proper HTML layout with book, date, time, and location as a table; reduces spam scoring
 - **Paris timezone** — invite times displayed and parsed in Europe/Paris time
 - **Host address auto-fill** — meeting location in the calendar invite now pulls automatically from the host's Notion address (supports Notion's place property type)
 - **Resilient Notion update** — if the calendar invite fails, a dialog offers to mark the book as read in Notion anyway

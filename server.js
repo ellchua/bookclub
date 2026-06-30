@@ -1,7 +1,6 @@
 const express = require("express");
 const path = require("path");
 const { Client } = require("@notionhq/client");
-const { Resend } = require("resend");
 require("dotenv").config();
 
 const app = express();
@@ -26,6 +25,13 @@ const memberAddressProperty = process.env.NOTION_MEMBER_ADDRESS_PROPERTY || "Add
 const memberCurrentHostProperty =
   process.env.NOTION_MEMBER_CURRENT_HOST_PROPERTY || "Current Host";
 const memberOrderProperty = process.env.NOTION_MEMBER_ORDER_PROPERTY || "Order";
+const googleCalendarId = process.env.GOOGLE_CALENDAR_ID || "primary";
+const googleCalendarTimeZone =
+  process.env.GOOGLE_CALENDAR_TIME_ZONE || "Europe/Paris";
+const googleCalendarEnabled =
+  !!process.env.GOOGLE_CLIENT_ID &&
+  !!process.env.GOOGLE_CLIENT_SECRET &&
+  !!process.env.GOOGLE_REFRESH_TOKEN;
 const builtinHostOrderNames = [
   "Andrea",
   "Ayan",
@@ -213,55 +219,132 @@ function sortByOrder(members) {
   });
 }
 
-function parseDateTime(dateTime) {
-  const d = new Date(dateTime);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
-}
+function parseLocalDateTime(dateTime) {
+  const match = String(dateTime || "").match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+  );
+  if (!match) return null;
 
-function toICSDate(date) {
-  return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-}
+  const [, year, month, day, hour, minute, second = "00"] = match;
+  const parts = {
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    hour: Number(hour),
+    minute: Number(minute),
+    second: Number(second)
+  };
+  const check = new Date(
+    Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+  );
 
-function escapeICS(text) {
-  return (text || "")
-    .replace(/\\/g, "\\\\")
-    .replace(/,/g, "\\,")
-    .replace(/;/g, "\\;")
-    .replace(/\n/g, "\\n");
-}
-
-function buildICSInvite({ title, description, location, startUTC, endUTC, organizer, attendees = [] }) {
-  const uid = `bookclub-${Date.now()}@local`;
-  const now = toICSDate(new Date());
-  const start = toICSDate(startUTC);
-  const end = toICSDate(endUTC);
-
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Book Club//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:REQUEST",
-    "BEGIN:VEVENT",
-    `UID:${uid}`,
-    `DTSTAMP:${now}`,
-    `DTSTART:${start}`,
-    `DTEND:${end}`,
-    `SUMMARY:${escapeICS(title)}`,
-    `DESCRIPTION:${escapeICS(description)}`,
-    `LOCATION:${escapeICS(location)}`,
-  ];
-
-  if (organizer) {
-    lines.push(`ORGANIZER:mailto:${organizer}`);
-  }
-  for (const email of attendees) {
-    lines.push(`ATTENDEE;RSVP=TRUE:mailto:${email}`);
+  if (
+    check.getUTCFullYear() !== parts.year ||
+    check.getUTCMonth() !== parts.month - 1 ||
+    check.getUTCDate() !== parts.day ||
+    check.getUTCHours() !== parts.hour ||
+    check.getUTCMinutes() !== parts.minute ||
+    check.getUTCSeconds() !== parts.second
+  ) {
+    return null;
   }
 
-  lines.push("END:VEVENT", "END:VCALENDAR");
-  return lines.join("\r\n");
+  return parts;
+}
+
+function formatLocalDateTime(parts) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}:${pad(parts.second)}`;
+}
+
+function addMinutesToLocalDateTime(parts, minutes) {
+  const date = new Date(
+    Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute + minutes, parts.second)
+  );
+  return formatLocalDateTime({
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    hour: date.getUTCHours(),
+    minute: date.getUTCMinutes(),
+    second: date.getUTCSeconds()
+  });
+}
+
+async function getGoogleAccessToken() {
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+    grant_type: "refresh_token"
+  });
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.access_token) {
+    const message = data.error_description || data.error || response.statusText;
+    throw new Error(`Google OAuth token refresh failed: ${message}`);
+  }
+
+  return data.access_token;
+}
+
+async function createGoogleCalendarInvite({ to, subject, description, location, date }) {
+  if (!googleCalendarEnabled) {
+    throw new Error(
+      "Google Calendar is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN."
+    );
+  }
+
+  const startParts = parseLocalDateTime(date);
+  if (!startParts) {
+    throw new Error("Invalid date.");
+  }
+
+  const startDateTime = formatLocalDateTime(startParts);
+  const endDateTime = addMinutesToLocalDateTime(startParts, 60);
+  const accessToken = await getGoogleAccessToken();
+  const calendarPath = encodeURIComponent(googleCalendarId);
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${calendarPath}/events?sendUpdates=all`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      summary: subject,
+      description: description || "Book Club discussion",
+      location: location || "TBD",
+      start: {
+        dateTime: startDateTime,
+        timeZone: googleCalendarTimeZone
+      },
+      end: {
+        dateTime: endDateTime,
+        timeZone: googleCalendarTimeZone
+      },
+      attendees: to.map((email) => ({ email, responseStatus: "needsAction" })),
+      guestsCanInviteOthers: false,
+      guestsCanModify: false,
+      guestsCanSeeOtherGuests: true,
+      reminders: { useDefault: true }
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message = data.error?.message || response.statusText;
+    throw new Error(`Google Calendar event creation failed: ${message}`);
+  }
+
+  return data;
 }
 
 async function getOrganizerState() {
@@ -303,7 +386,7 @@ async function getOrganizerState() {
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, notionEnabled });
+  res.json({ ok: true, notionEnabled, googleCalendarEnabled });
 });
 
 app.get("/api/books", async (_req, res) => {
@@ -433,69 +516,30 @@ app.post("/api/invite", async (req, res) => {
     return res.status(400).json({ error: "to must be a non-empty array of email addresses." });
   }
 
-  const startUTC = parseDateTime(date);
-  if (!startUTC) {
+  if (!parseLocalDateTime(date)) {
     return res.status(400).json({ error: "Invalid date." });
-  }
-  const endUTC = new Date(startUTC.getTime() + 60 * 60 * 1000);
-
-  if (!process.env.RESEND_API_KEY) {
-    return res.status(400).json({ error: "RESEND_API_KEY is not configured." });
   }
 
   const subject = title || `${eventName || "Book Club"} at ${hostName ? `${hostName}'s` : "Host TBD"}`;
-  const from = "Book Club <bookclub@ellora.ch>";
-  const ics = buildICSInvite({
-    title: subject,
-    description: description || "Book Club discussion",
-    location: location || "TBD",
-    startUTC,
-    endUTC,
-    organizer: from,
-    attendees: to
-  });
 
   console.log(`[invite] Sending to ${to.length} recipients: ${to.join(", ")}`);
   console.log(`[invite] Subject: ${subject}`);
-  console.log(`[invite] Date: ${startUTC.toISOString()}`);
+  console.log(`[invite] Date: ${date} (${googleCalendarTimeZone})`);
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY);
-    const tz = "Europe/Paris";
-    const bookDisplay = description.replace(/^Book:\s*/i, "");
-    const dateStr = startUTC.toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: tz });
-    const timeStr = startUTC.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz });
-    await resend.emails.send({
-      from,
+    const event = await createGoogleCalendarInvite({
       to,
       subject,
-      text: `${description}\n\nDate: ${dateStr} at ${timeStr} (Paris)\nLocation: ${location || "TBD"}\n\nA calendar invite is attached.`,
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-          <h2 style="color:#5c3d1e">📖 Spilling the Tea Book Club</h2>
-          <table style="border-collapse:collapse;margin:16px 0">
-            <tr><td style="padding:4px 12px 4px 0;color:#888">📚 Book</td><td style="padding:4px 0"><strong>${bookDisplay}</strong></td></tr>
-            <tr><td style="padding:4px 12px 4px 0;color:#888">📅 Date</td><td style="padding:4px 0"><strong>${dateStr}</strong></td></tr>
-            <tr><td style="padding:4px 12px 4px 0;color:#888">⏰ Time</td><td style="padding:4px 0"><strong>${timeStr} (Paris)</strong></td></tr>
-            <tr><td style="padding:4px 12px 4px 0;color:#888">📍 Location</td><td style="padding:4px 0"><strong>${location || "TBD"}</strong></td></tr>
-          </table>
-          <p style="color:#888;font-size:13px">A calendar invite (.ics) is attached — open it to add this event to your calendar.</p>
-        </div>
-      `,
-      attachments: [
-        {
-          filename: "book-club-invite.ics",
-          content: Buffer.from(ics).toString("base64")
-        }
-      ]
+      description,
+      location,
+      date
     });
+    console.log(`[invite] Google Calendar event: ${event.htmlLink || event.id}`);
+    res.json({ ok: true, sentTo: to.length, eventId: event.id, htmlLink: event.htmlLink });
   } catch (err) {
-    console.error(`[invite] Resend error:`, err);
+    console.error("[invite] Google Calendar error:", err);
     return res.status(500).json({ error: err.message });
   }
-
-  console.log(`[invite] Successfully sent to ${to.length} recipients`);
-  res.json({ ok: true, sentTo: to.length });
 });
 
 app.get("*", (_req, res) => {
