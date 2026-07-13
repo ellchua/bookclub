@@ -268,7 +268,21 @@ function buildWhatsAppMessage({ selectedBook, chosenHost, scheduleDate }) {
 }
 
 function openWhatsAppShare(message) {
-  const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const encodedMessage = encodeURIComponent(message);
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const url = isMobile
+    ? `whatsapp://send?text=${encodedMessage}`
+    : `https://wa.me/?text=${encodedMessage}`;
+
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(message).catch(() => {});
+  }
+
+  if (isMobile) {
+    window.location.href = url;
+    return;
+  }
+
   const opened = window.open(url, "_blank", "noopener,noreferrer");
   if (!opened) window.location.href = url;
 }
