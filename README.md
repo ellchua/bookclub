@@ -13,6 +13,7 @@ Hosted on a private custom domain.
 - **Slot machine roller** — pulls unread books from a Notion database and randomly selects one with a slot machine animation
 - **Host rotation** — tracks the hosting order across sessions; suggests the next host automatically and allows choosing someone else, adjusting the sequence accordingly
 - **Calendar invites** — after confirming a book and host, creates a Google Calendar event with all selected members as guests, using the host's address as the location
+- **WhatsApp sharing** — after the invite sends, opens WhatsApp with a ready-to-send reminder for the group chat
 - **Notion as the source of truth** — books, members, host order, addresses, and emails all live in Notion; the app reads and writes directly to it
 - **Mobile-friendly** — works on phone and desktop; lever can be dragged or tapped
 

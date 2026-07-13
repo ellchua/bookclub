@@ -238,6 +238,48 @@ function defaultDateTimeLocal() {
   )}`;
 }
 
+function formatScheduleForShare(dateValue) {
+  const match = String(dateValue || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return dateValue || "TBD";
+
+  const [, year, month, day, hour, minute] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  const dateText = date.toLocaleDateString("en-GB", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC"
+  });
+
+  return `${dateText} at ${hour}:${minute} (Paris)`;
+}
+
+function buildWhatsAppMessage({ selectedBook, chosenHost, scheduleDate }) {
+  const title = selectedBook.title || "the next book";
+  const author = selectedBook.author || "Unknown author";
+  const host = chosenHost.name || "TBD";
+  const location = chosenHost.address || "TBD";
+  const when = formatScheduleForShare(scheduleDate);
+
+  return [
+    "Book club is scheduled!",
+    "",
+    `Book: ${title} by ${author}`,
+    `Host: ${host}`,
+    `Date: ${when}`,
+    `Location: ${location}`,
+    "",
+    "Calendar invite just sent."
+  ].join("\n");
+}
+
+function openWhatsAppShare(message) {
+  const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) window.location.href = url;
+}
+
 async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
   const orgData = prefetchedOrganizer || await api("/api/organizer");
   const members = orgData.members || [];
@@ -307,6 +349,7 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
     return;
   }
   let inviteSent = false;
+  let whatsAppMessage = "";
   try {
     await api("/api/invite", {
       method: "POST",
@@ -320,6 +363,11 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
       })
     });
     inviteSent = true;
+    whatsAppMessage = buildWhatsAppMessage({
+      selectedBook,
+      chosenHost,
+      scheduleDate: schedule.date
+    });
   } catch (err) {
     const markAnyway = await showChoiceModal(
       `<h3>Invite failed</h3><p>${err.message}</p><p>Mark book as read in Notion anyway?</p>`,
@@ -338,6 +386,15 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
   });
   await loadBooks({ render: false });
   setStatus(inviteSent ? "Invite sent!" : "Book marked as read (invite not sent).");
+
+  if (inviteSent) {
+    const shareNow = await showChoiceModal(
+      "<h3>Share on WhatsApp?</h3><p>Open WhatsApp with a ready-to-send book club reminder.</p>",
+      "Open WhatsApp",
+      "Skip"
+    );
+    if (shareNow) openWhatsAppShare(whatsAppMessage);
+  }
 }
 
 async function rollBooks() {
