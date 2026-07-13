@@ -242,17 +242,8 @@ function formatScheduleForShare(dateValue) {
   const match = String(dateValue || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (!match) return dateValue || "TBD";
 
-  const [, year, month, day, hour, minute] = match;
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
-  const dateText = date.toLocaleDateString("en-GB", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC"
-  });
-
-  return `${dateText} at ${hour}:${minute} (Paris)`;
+  const [, , month, day] = match;
+  return `${Number(day)}/${Number(month)}`;
 }
 
 function buildWhatsAppMessage({ selectedBook, chosenHost, scheduleDate }) {
@@ -391,7 +382,6 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
     method: "POST",
     body: JSON.stringify({ id: selectedBook.id })
   });
-  await loadBooks({ render: false });
   setStatus(inviteSent ? "Invite sent!" : "Book marked as read (invite not sent).");
 
   if (inviteSent) {
@@ -402,6 +392,8 @@ async function runHostAndInviteFlow(selectedBook, prefetchedOrganizer = null) {
     );
     if (shareNow) openWhatsAppShare(whatsAppMessage);
   }
+
+  await loadBooks({ render: false });
 }
 
 async function rollBooks() {
