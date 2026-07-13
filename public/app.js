@@ -259,17 +259,10 @@ function buildWhatsAppMessage({ selectedBook, chosenHost, scheduleDate }) {
   const title = selectedBook.title || "the next book";
   const author = selectedBook.author || "Unknown author";
   const host = chosenHost.name || "TBD";
-  const location = chosenHost.address || "TBD";
   const when = formatScheduleForShare(scheduleDate);
 
   return [
-    "Book club is scheduled!",
-    "",
-    `Book: ${title} by ${author}`,
-    `Host: ${host}`,
-    `Date: ${when}`,
-    `Location: ${location}`,
-    "",
+    `Next book club - ${when} at ${host}'s: ${title} by ${author}`,
     "Calendar invite just sent."
   ].join("\n");
 }
